@@ -1,0 +1,17 @@
+ext {
+    contractMangerMainClass = "nxt.tools.ContractManager"
+    configureDeployTask = { contractPackage, contractName,
+        configProperties = "$projectDir/nxt-deployContract.properties" ->
+        return {
+            classpath = sourceSets.main.runtimeClasspath
+
+            mainClass = contractMangerMainClass
+
+            systemProperties = ['nxt.properties': configProperties]
+
+            workingDir = project(':ardor-library').projectDir
+
+            args "-u", "-p", contractPackage, "-n", contractName, ""
+        }
+    }
+}

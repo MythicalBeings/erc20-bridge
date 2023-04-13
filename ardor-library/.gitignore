@@ -1,0 +1,4 @@
+libs-export
+build/
+conf/contract.uploader.json
+/nxt_unit_test_db/

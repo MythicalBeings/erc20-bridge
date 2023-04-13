@@ -1,0 +1,25 @@
+plugins {
+    id 'java-library'
+    id 'org.web3j' version '4.8.7'
+}
+
+group 'com.jelurida'
+version '0.0.1'
+
+description 'Utilities library for working with ERC-20 contract'
+
+repositories {
+    mavenCentral()
+}
+
+web3j {
+    generatedPackageName = 'com.jelurida.web3j.generated'
+}
+
+dependencies {
+    api("org.web3j:core:4.8.7")
+}
+
+test {
+    useJUnitPlatform()
+}

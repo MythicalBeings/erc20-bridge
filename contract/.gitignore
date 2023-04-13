@@ -1,0 +1,3 @@
+libs-export
+build/
+conf/nxt-deployContract.properties

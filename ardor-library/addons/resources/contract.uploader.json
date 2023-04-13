@@ -1,0 +1,57 @@
+{
+  "contracts": [
+    {
+      "className": "AllForOnePayment",
+      "params": {
+        "chain": 2,
+        "frequency": "loaded from the property contract.param.AllForOnePayment.frequency in the nxt.properties file"
+      }
+    },
+    {
+      "className": "ChildToParentExchange",
+      "params": {
+        "maxAmount": 50
+      }
+    },
+    {
+      "className": "IgnisArdorRates",
+	  "filePath": "./addons/resources/ignis.ardor.rates.contract.jar",
+      "params": {
+		"frequency": 3
+	  }
+    },
+    {
+      "className": "LeaseRenewal",
+      "params": {
+        "leasePeriod": 65535,
+        "leaseRenewalWarningPeriod": 2880
+      }
+    },
+    {
+      "className": "NewAccountFaucet",
+      "params": {
+        "chain": 2,
+        "thresholdBlocks": 1440,
+        "thresholdAmountNQT": 72000000000,
+		"faucetAmountNQT": 500000000
+      }
+    },
+    {
+      "className": "DistributedRandomNumberGenerator",
+	  "version": "1.0.0",
+	  "url": "https://www.jelurida.com/",
+	  "description": "Test Description",
+      "params": {}
+    },
+    {
+      "className": "ForgingReward",
+      "params": {
+        "interval": 5,
+		"rewardArdor": "true",
+		"rewardNxt": "true",
+		"rewardChain": "IGNIS",
+		"rewardAmountNQT": 150000000
+      }
+    }
+  ]
+}

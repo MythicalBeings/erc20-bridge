@@ -1,0 +1,95 @@
+/*
+ * Copyright © 2021 Jelurida IP B.V.
+ *
+ * See the LICENSE.txt file at the top-level directory of this distribution
+ * for licensing information.
+ *
+ * Unless otherwise agreed in a custom licensing agreement with Jelurida B.V.,
+ * no part of this software, including this file, may be copied, modified,
+ * propagated, or distributed except according to the terms contained in the
+ * LICENSE.txt file.
+ *
+ * Removal or modification of this copyright notice is prohibited.
+ *
+ */
+
+plugins {
+    id 'java-library'
+}
+
+group 'com.jelurida'
+version '2.3.4'
+
+description 'Ardor classes and configuration'
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    ardorLibs
+    api.extendsFrom ardorLibs
+
+    testApi
+}
+
+ext {
+    jettyVersion = '9.4.46.v20220331'
+    luceneVersion = '7.1.0'
+    deployContract = { packageName, contractName, nxtDeploymentProperties ->
+
+    }
+}
+
+dependencies {
+    api files("ardor.jar")
+    ardorLibs "org.bouncycastle:bcpkix-jdk15on:1.65!!"
+    ardorLibs "org.bouncycastle:bcprov-jdk15on:1.65!!"
+    ardorLibs 'commons-cli:commons-cli:1.3.1!!'
+    ardorLibs 'org.apache.commons:commons-math3:3.6.1!!'
+    ardorLibs 'net.i2p.crypto:eddsa:0.3.0!!'
+    ardorLibs 'com.h2database:h2:1.4.200!!'
+    ardorLibs 'com.squareup:javapoet:1.11.0!!'
+    ardorLibs('com.google.zxing:javase:3.3.0!!') {
+        transitive = false
+    }
+    ardorLibs 'com.google.zxing:core:3.3.0!!'
+    ardorLibs "org.eclipse.jetty:jetty-proxy:$jettyVersion!!"
+    ardorLibs "org.eclipse.jetty:jetty-server:$jettyVersion!!"
+    ardorLibs "org.eclipse.jetty:jetty-servlet:$jettyVersion!!"
+    ardorLibs "org.eclipse.jetty:jetty-servlets:$jettyVersion!!"
+    ardorLibs "org.apache.lucene:lucene-analyzers-common:$luceneVersion!!"
+    ardorLibs "org.apache.lucene:lucene-queryparser:$luceneVersion!!"
+    ardorLibs 'com.googlecode.json-simple:json-simple:1.1.1!!'
+    ardorLibs 'org.slf4j:slf4j-jdk14:1.7.22!!'
+    ardorLibs 'org.slf4j:slf4j-api:1.7.22!!'
+    ardorLibs('org.apache.tika:tika-parsers:1.13!!') {
+        transitive = false
+    }
+    ardorLibs 'org.apache.tika:tika-core:1.13!!'
+    ardorLibs files("lib/purejavahidapi-0.0.10j2.jar")
+    ardorLibs 'net.java.dev.jna:jna:5.5.0!!'
+    ardorLibs 'net.java.dev.jna:jna-platform:5.5.0!!'
+    ardorLibs 'org.bitlet:weupnp:0.1.4!!'
+    ardorLibs 'org.jooq:joor-java-8:0.9.14'
+
+    testApi files("ardor-tests.jar")
+    testApi 'junit:junit:4.11'
+    testApi 'org.hamcrest:hamcrest-core:1.3'
+    testApi 'org.eclipse.jetty.websocket:websocket-client:9.4.40.v20210413'
+    testApi 'org.eclipse.jetty.websocket:websocket-server:9.4.40.v20210413'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ["conf"]
+        }
+    }
+}
+
+task exportArdorLibs(type: Copy) {
+    dependsOn configurations.ardorLibs
+    from configurations.ardorLibs
+    into "libs-export"
+}

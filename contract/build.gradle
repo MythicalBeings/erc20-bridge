@@ -1,0 +1,75 @@
+/*
+ * Copyright © 2021 Jelurida IP B.V.
+ *
+ * See the LICENSE.txt file at the top-level directory of this distribution
+ * for licensing information.
+ *
+ * Unless otherwise agreed in a custom licensing agreement with Jelurida B.V.,
+ * no part of this software, including this file, may be copied, modified,
+ * propagated, or distributed except according to the terms contained in the
+ * LICENSE.txt file.
+ *
+ * Removal or modification of this copyright notice is prohibited.
+ *
+ */
+
+plugins {
+    id 'java'
+}
+
+group 'com.jelurida'
+version '0.0.2'
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    ardorImpl
+    implementation.extendsFrom(ardorImpl)
+}
+
+dependencies {
+    ardorImpl(project(':ardor-library'))
+    testImplementation(project(':ardor-library')) {
+        targetConfiguration 'testApi'
+    }
+    implementation(project(':erc20'))
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.3.1'
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency {
+        DependencyResolveDetails details ->
+            if (details.requested.group == 'org.slf4j' && details.requested.name == 'slf4j-api') {
+                details.useVersion '1.7.22'
+                details.because 'This is what is used in Ardor'
+            }
+            if (details.requested.group == 'org.bouncycastle' && details.requested.name == 'bcprov-jdk15on') {
+                details.useVersion '1.65'
+                details.because 'This is what is used in Ardor'
+            }
+    }
+}
+
+test {
+    useJUnitPlatform()
+    workingDir = project(':ardor-library').projectDir
+}
+
+task exportLibsMissingInArdor(type: Copy) {
+    dependsOn ':erc20:clean'
+    dependsOn ':erc20:jar'
+    dependsOn configurations.runtimeClasspath, configurations.ardorImpl
+    from {
+        configurations.runtimeClasspath - configurations.ardorImpl
+    }
+    into "libs-export"
+}
+
+apply from: '../ardor-library/deploy.gradle'
+task deployContract(type: JavaExec) {
+    configure configureDeployTask('com.jelurida.ardor.contracts.interchain.eth', 'AssetsErc20',
+            "$projectDir/conf/nxt-deployContract.properties")
+}
