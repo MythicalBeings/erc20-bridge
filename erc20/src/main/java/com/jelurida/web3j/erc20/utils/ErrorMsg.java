@@ -13,10 +13,9 @@
  *
  */
 
-package com.jelurida.web3j.utils.txman;
+package com.jelurida.web3j.erc20.utils;
 
-import java.math.BigInteger;
-
-public interface RetryFeeProvider {
-    BigInteger getNewGasPrice(BigInteger failedTransactionGasPrice);
+public class ErrorMsg {
+    public static final String INSUFFICIENT_FUNDS = "insufficient funds for gas * price + value";
+    public static final String NONCE_TOO_LOW = "nonce too low";
 }

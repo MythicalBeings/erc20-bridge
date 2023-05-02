@@ -13,7 +13,7 @@
  *
  */
 
-rootProject.name = 'asset-to-erc1155-bridge'
+rootProject.name = 'erc20-bridge'
 include 'contract'
 include 'ardor-library'
 include 'erc20'

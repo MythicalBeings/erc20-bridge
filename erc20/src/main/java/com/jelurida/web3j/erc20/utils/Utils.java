@@ -13,7 +13,7 @@
  *
  */
 
-package com.jelurida.web3j.utils;
+package com.jelurida.web3j.erc20.utils;
 
 import com.jelurida.web3j.generated.IERC20;
 import org.slf4j.Logger;
@@ -78,11 +78,11 @@ public class Utils {
         return timestamp.longValue() * 1000L;
     }
 
-    public static Function createSetApprovalForAllFunction(String operator, Boolean approved) {
+    public static Function createSetApprovalForAllFunction(String operator, BigInteger amount) {
         return new Function(
                 IERC20.FUNC_APPROVE,
                 Arrays.asList(new org.web3j.abi.datatypes.Address(160, operator),
-                        new org.web3j.abi.datatypes.Bool(approved)),
+                        new org.web3j.abi.datatypes.Int(amount)),
                 Collections.emptyList());
     }
 

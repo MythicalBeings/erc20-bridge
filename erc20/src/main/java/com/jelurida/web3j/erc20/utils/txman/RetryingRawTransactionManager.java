@@ -13,9 +13,9 @@
  *
  */
 
-package com.jelurida.web3j.utils.txman;
+package com.jelurida.web3j.erc20.utils.txman;
 
-import com.jelurida.web3j.utils.ErrorMsg;
+import com.jelurida.web3j.erc20.utils.ErrorMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.web3j.crypto.Credentials;

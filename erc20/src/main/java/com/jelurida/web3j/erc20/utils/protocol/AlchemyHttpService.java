@@ -13,7 +13,7 @@
  *
  */
 
-package com.jelurida.web3j.utils.protocol;
+package com.jelurida.web3j.erc20.utils.protocol;
 
 import org.web3j.protocol.exceptions.ClientConnectionException;
 import org.web3j.protocol.http.HttpService;

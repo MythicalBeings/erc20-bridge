@@ -17,36 +17,20 @@ package com.jelurida.ardor.contracts.interchain.eth;
 
 import com.jelurida.web3j.generated.BRIDGE_ERC20;
 import com.jelurida.web3j.generated.IERC20;
-//import com.jelurida.web3j.generated.IERC20Ardor;
-import com.jelurida.web3j.utils.TransactionalContract;
-import com.jelurida.web3j.utils.Utils;
-import com.jelurida.web3j.utils.protocol.AlchemyHttpService;
-import com.jelurida.web3j.utils.txman.RetryFeeProvider;
-import com.jelurida.web3j.utils.txman.RetryingRawTransactionManager;
+import com.jelurida.web3j.erc20.utils.TransactionalContract;
+import com.jelurida.web3j.erc20.utils.Utils;
+import com.jelurida.web3j.erc20.utils.protocol.AlchemyHttpService;
+import com.jelurida.web3j.erc20.utils.txman.RetryFeeProvider;
+import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
 import nxt.Constants;
 import nxt.Nxt;
 import nxt.account.Account;
-import nxt.addons.AbstractContract;
-import nxt.addons.AbstractContractContext;
-import nxt.addons.BlockContext;
-import nxt.addons.ContractParametersProvider;
-import nxt.addons.ContractRunnerConfig;
-import nxt.addons.ContractRunnerParameter;
-import nxt.addons.ContractSetupParameter;
-import nxt.addons.InitializationContext;
-import nxt.addons.JA;
-import nxt.addons.JO;
-import nxt.addons.RequestContext;
-import nxt.addons.ShutdownContext;
+import nxt.addons.*;
 import nxt.ae.AssetExchangeTransactionType;
 import nxt.blockchain.ChildChain;
 import nxt.crypto.Crypto;
 import nxt.crypto.EncryptedData;
-import nxt.http.callers.GetAssetCall;
-import nxt.http.callers.GetExecutedTransactionsCall;
-import nxt.http.callers.GetTransactionCall;
-import nxt.http.callers.ReadMessageCall;
-import nxt.http.callers.TransferAssetCall;
+import nxt.http.callers.*;
 import nxt.http.responses.BlockResponse;
 import nxt.util.Convert;
 import nxt.util.Logger;
@@ -67,12 +51,7 @@ import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.RemoteFunctionCall;
 import org.web3j.protocol.core.methods.request.EthFilter;
-import org.web3j.protocol.core.methods.response.EthBlock;
-import org.web3j.protocol.core.methods.response.EthLog;
-import org.web3j.protocol.core.methods.response.EthTransaction;
-import org.web3j.protocol.core.methods.response.Log;
-import org.web3j.protocol.core.methods.response.Transaction;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.protocol.core.methods.response.*;
 import org.web3j.tx.Contract;
 import org.web3j.tx.TransactionManager;
 import org.web3j.tx.Transfer;
@@ -84,21 +63,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static nxt.util.JSON.jsonArrayCollector;
@@ -157,11 +123,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             return 1;
         }
 
-        /**
-         * Confirmations to wait before processing the wrapping of Ardor assets with ERC1155 tokens
-         *
-         * @return Number of blocks
-         */
         @ContractRunnerParameter
         @ContractSetupParameter
         default int ardorConfirmations() {
@@ -191,12 +152,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             return 15;
         }
 
-        /**
-         * Confirmations to wait before processing the unwrapping of ERC1155 tokens and releasing the
-         * locked Ardor assets
-         *
-         * @return Number of blocks
-         */
         @ContractRunnerParameter
         @ContractSetupParameter
         default int ethereumConfirmations() {
@@ -239,11 +194,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             return 15;
         }
 
-        /**
-         * Secret used to generate the credentials of the Ethereum account which holds the locked ERC1155
-         * tokens
-         * @return Secret string. Use at least 160 bits of entropy
-         */
         @ContractRunnerParameter
         String ethereumBlockedAccountSecret();
 
@@ -263,16 +213,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         @ContractSetupParameter
         String contractAddress();
 
-        /**
-         * Mapping between ardor asset IDs and the ERC1155 token IDs. The JSON keys must contain
-         * asset IDs as unsigned integer strings. The corresponding values must contain ERC1155
-         * token IDs as unsigned integer string, or a string with format '0x' followed by up to
-         * 64 hex chars (32 bytes in hex format)
-         *
-         * This parameter is ignited if {@link #autoMintErc1155()} is true
-         *
-         * @return Mapping as JSON object
-         */
         @ContractRunnerParameter
         @ContractSetupParameter
         default JO assetIdToErc20IdMap() {
@@ -286,6 +226,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         threadPool = Executors.newCachedThreadPool();
         Parameters params = context.getParams(Parameters.class);
         pegContext.init(params, threadPool);
+        Logger.logInfoMessage("MB-ERC20: pegContext init!");
         if (pegContext.initializationError != null) {
             Logger.logErrorMessage("Peg initialization error " + pegContext.initializationError);
         }
@@ -316,6 +257,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         if ("getPegAddresses".equals(command)) {
             response.put("ethereumBlockedAccount", pegContext.ethBlockedAccount.getAddress());
             response.put("ardorBlockedAccount", context.getAccountRs());
+        } else if ("mbGetContractAddress".equals(command)) {
+            response.put("contractAddress", pegContext.params.contractAddress());
         } else if ("mbGetWrapDepositAddress".equals(command)) {
             String ardorRecipientPublicKey = getArdorRecipientPublicKeyParameter(context, requestParams);
             if (ardorRecipientPublicKey == null)
@@ -454,7 +397,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                                         amountToTransfer, recipientAddress);
                     call.sendAsync().thenAccept(emptyReceipt -> {
                         pegContext.ebaTransactionManager.setCallbacks(emptyReceipt, (tr, p) -> {
-                            logTransactionReceipt("Wrapping complete ", tr.getTransactionHash());
+                            logTransactionReceipt("Unwrapping complete ", tr.getTransactionHash());
                             result.put("success", tr.getTransactionHash());
                         }, (error) -> result.put("error", error));
                     }).exceptionally(e -> {
@@ -758,7 +701,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 return;
             }
 
-            ethContract = new TransactionalContract("0xfbbd91eaedd6773dd1d976e75c3de55bb342fdd0", web3j,
+            ethContract = new TransactionalContract(false, "0x3683307da3cf13526e9a1e918a0359ed8dc8afe5", web3j,
                     ebaTransactionManager, new DefaultGasProvider());
 
             if(ethContract == null) {
@@ -1038,28 +981,45 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         @Override
         public boolean execute() throws Exception {
             if (getState() == WrapState.ENSURE_ACCOUNT_WITHDRAWER_ROLE) {
-                BigInteger allowance = context.getEthContractReadOnly().allowance(getAccount().getAddress(),
-                        context.params.contractAddress()).send();
+                // Check EBA can withdraw form smart contract
+                Logger.logInfoMessage("--------------------------------------------------------");
+                String address = getAccount().getAddress();
+                Logger.logInfoMessage("MB-ERC20: ENSURE_ACCOUNT_WITHDRAWER_ROLE - address: " + address);
 
+                //String contractAddress = context.params.contractAddress();
+                //Logger.logInfoMessage("MB-ERC20: ENSURE_ACCOUNT_WITHDRAWER_ROLE - contractAddress: " + contractAddress);
+
+                String addressEba = context.ethBlockedAccount.getAddress();
+                Logger.logInfoMessage("MB-ERC20: ENSURE_ACCOUNT_WITHDRAWER_ROLE - addressEba: " + addressEba);
+
+                BigInteger allowance = context.getEthContractReadOnly().allowance(address, addressEba).send();
+                Logger.logInfoMessage("MB-ERC20: ENSURE_ACCOUNT_WITHDRAWER_ROLE - allowance: " + allowance);
+                Logger.logInfoMessage("--------------------------------------------------------");
                 if (getAmount().compareTo(allowance) == 1) {
                     gasPrice = context.getEthGasPrice();
+                    Logger.logInfoMessage("MB-ERC20: Gas price: " + gasPrice);
                     setState(WrapState.FUND_DEPOSIT_ACCOUNT);
                     return false;
                 } else {
                     onComplete();
                 }
             } else if (getState() == WrapState.FUND_DEPOSIT_ACCOUNT) {
-                Function function = Utils.createSetApprovalForAllFunction(context.params.contractAddress(), true);
+                Function function = Utils.createSetApprovalForAllFunction(context.ethBlockedAccount.getAddress(), getAmount());
                 String data = FunctionEncoder.encode(function);
+                Logger.logInfoMessage("--------------------------------------------------------");
+                String ethContractAddress = context.getEthContractReadOnly().getContractAddress();
+                Logger.logInfoMessage("MB-ERC20: ENSURE_ACCOUNT_WITHDRAWER_ROLE - ethContractAddress: " + ethContractAddress);
+
                 org.web3j.protocol.core.methods.request.Transaction transaction = new org.web3j.protocol.core.methods.request.Transaction(
                         getAccount().getAddress(),
-                        null, null, null, context.params.contractAddress(), BigInteger.ZERO, data);
+                        null, null, null, ethContractAddress, BigInteger.ZERO, data);
+
                 estimatedGas = context.web3j.ethEstimateGas(transaction).send().getAmountUsed();
 
                 BigInteger estimatedApprovalTransactionPrice = gasPrice.multiply(estimatedGas);
 
                 TransactionReceipt receipt = new Transfer(context.web3j, context.ebaTransactionManager)
-                        .sendFunds(context.params.contractAddress(), new BigDecimal(estimatedApprovalTransactionPrice),
+                        .sendFunds(getAccount().getAddress(), new BigDecimal(estimatedApprovalTransactionPrice),
                                 org.web3j.utils.Convert.Unit.WEI).send();
                 context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
                     logTransactionReceipt("MB-Bridge: Deposit account funding " + getAccount().getAddress(), tr.getTransactionHash());
@@ -1186,7 +1146,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         @Override
         public boolean execute() throws Exception {
             if (state == WrapState.ENSURE_ACCOUNT_WITHDRAWER_ROLE) {
-                Logger.logWarningMessage("MB-Bridge | mbWrapTask + execute | ENSURE_ACCOUNT_WITHDRAWER_ROLE");
+                Logger.logWarningMessage("ERC-20 | mbWrapTask + execute | ENSURE_ACCOUNT_WITHDRAWER_ROLE");
                 context.ensureAccountApprovesEba(this);
             } else if (state == WrapState.CHECK_EXISTING_BURN) {
                 taskIdHash = Crypto.sha256().digest(taskId.toBytes());

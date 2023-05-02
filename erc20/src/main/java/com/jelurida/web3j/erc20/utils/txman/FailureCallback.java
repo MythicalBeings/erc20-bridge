@@ -13,11 +13,8 @@
  *
  */
 
-package com.jelurida.web3j.utils.txman;
+package com.jelurida.web3j.erc20.utils.txman;
 
-import org.web3j.crypto.RawTransaction;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
-
-public interface AcceptanceCallback {
-    void onAcceptedToBlockchain(TransactionReceipt transactionReceipt, RawTransaction rawTransaction);
+public interface FailureCallback {
+    void onTransactionFailure(String error);
 }

@@ -13,7 +13,7 @@
  *
  */
 
-package com.jelurida.web3j.utils.txman;
+package com.jelurida.web3j.erc20.utils.txman;
 
 import org.web3j.crypto.RawTransaction;
 import org.web3j.crypto.transaction.type.Transaction1559;

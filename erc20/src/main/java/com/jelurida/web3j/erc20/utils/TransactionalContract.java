@@ -13,7 +13,7 @@
  *
  */
 
-package com.jelurida.web3j.utils;
+package com.jelurida.web3j.erc20.utils;
 
 import com.jelurida.web3j.generated.IERC20;
 import org.web3j.protocol.Web3j;
@@ -32,7 +32,7 @@ public class TransactionalContract {
     private final IERC20 erc20WrappedContract;
     private BigInteger lastSetGasPrice = null;
 
-    public TransactionalContract(String contractAddress, Web3j web3j,
+    public TransactionalContract(boolean isMinter, String contractAddress, Web3j web3j,
                                  TransactionManager transactionManager, ContractGasProvider contractGasProvider) {
         this.web3j = web3j;
         erc20WrappedContract = IERC20.load(contractAddress, web3j, transactionManager, contractGasProvider);
