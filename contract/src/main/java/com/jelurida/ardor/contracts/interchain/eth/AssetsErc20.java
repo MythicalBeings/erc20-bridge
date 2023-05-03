@@ -397,33 +397,23 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         mbIsExistingWrappingLog(context, log, amountToTransfer, fullHash)).findAny().orElse(null);
 
                 if (logFromExistingWrap == null) {
-                    RemoteFunctionCall<TransactionReceipt> call = pegContext.getEthContractForTransaction(IERC20.class)
-                                .transferFrom(pegContext.ethBlockedAccount.getAddress(),
-                                        recipientAddress, amountToTransfer);
-
-                    call.sendAsync().thenAccept(emptyReceipt -> {
-                        pegContext.ebaTransactionManager.setCallbacks(emptyReceipt, (tr, p) -> {
-                            logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | Unwrapping complete ", tr.getTransactionHash());
-                            result.put("success", tr.getTransactionHash());
-                        }, (error) -> result.put("error", error));
-                    }).exceptionally(e -> {
-                        Logger.logErrorMessage("MB-ERC20 | mbProcessUnwrapTransaction | Wrapping error", e);
-                        result.put("error", "Transfer: " + e.getMessage());
-                        return null;
-                    });
-
                     // -------------------------------
-                    BigInteger gasPrice = pegContext.getEthGasPrice();
-                    BigInteger estimatedGas = gasPrice.multiply(BigInteger.valueOf(2));
-                    StaticGasProvider depositContractGasProvider = new StaticGasProvider(gasPrice, estimatedGas);
+                    BigDecimal amountBigDecimal = new BigDecimal(amountToTransfer);
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | amountToTransfer: " + amountToTransfer);
+                    BigDecimal test = amountBigDecimal.divide(BigDecimal.valueOf(100000000));
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | test: " + test);
+                    String aux = test.toString();
+                    BigInteger amountInEther = org.web3j.utils.Convert.toWei(aux, org.web3j.utils.Convert.Unit.ETHER).toBigIntegerExact();
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Value in ETHER: " + amountInEther);
+
+                    StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
 
                     IERC20 contractByDepositAccount = IERC20.load(pegContext.params.contractAddress(),
                             pegContext.web3j,
                             pegContext.ebaTransactionManager,
                             depositContractGasProvider);
 
-                    TransactionReceipt emptyReceipt = contractByDepositAccount
-                            .transfer(recipientAddress, amountToTransfer).send();
+                    TransactionReceipt emptyReceipt = contractByDepositAccount.transfer(recipientAddress, amountInEther).send();
 
                     pegContext.ebaTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
                         logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | Unwrapping complete ", tr.getTransactionHash());
@@ -863,16 +853,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 Thread.sleep((requiredConfirmations - currentConfirmations + 1) * getEthBlockDuration());
             }
             return web3j.ethGetTransactionReceipt(transferReceipt.getTransactionHash()).send().getTransactionReceipt().orElse(null);
-        }
-
-        /*
-        public IERC20 getEthContractReadOnly() {
-            return ethContract.getReadOnly(IERC20.class);
-        }
-        */
-
-        public <T extends Contract> T getEthContractForTransaction(Class<T> contractClass) throws IOException {
-            return ethContract.getForTransaction(contractClass, ethBlockedAccount.getAddress(), getEthGasPrice());
         }
 
         private boolean waitArdorTransactionToConfirm(String fullHash, int expirationTime) throws InterruptedException {
