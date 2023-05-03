@@ -84,6 +84,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static final long ETH_GAS_PRICE_ESTIMATION_EXPIRATION = 60 * 60;
     private final PegContext pegContext = new PegContext();
 
+    private static final BigDecimal QNT_FACTOR = new BigDecimal("100000000");
+
     private ExecutorService threadPool;
     private final ConcurrentLinkedDeque<JO> wrappingLog = new ConcurrentLinkedDeque<>();
     private int lastUnwrapHeight;
@@ -1216,7 +1218,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 BigDecimal amountInEther = org.web3j.utils.Convert.fromWei(aux, org.web3j.utils.Convert.Unit.ETHER);
                 Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Value in ETHER: " + amountInEther);
 
-                BigInteger etherInQNT = amountInEther.multiply(new BigDecimal("100000000")).toBigInteger();
+                BigInteger etherInQNT = amountInEther.multiply(QNT_FACTOR).toBigInteger();
                 Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | moreTest: " + etherInQNT);
 
                 long finalAmount = etherInQNT.longValueExact();
