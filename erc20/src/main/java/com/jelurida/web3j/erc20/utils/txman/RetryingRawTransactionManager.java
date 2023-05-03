@@ -287,7 +287,7 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
     private Fees1559 calculateFees1559(BigInteger gasPrice) throws IOException {
         Fees1559 result = new Fees1559();
         EthBlock ethBlock = web3j.ethGetBlockByNumber(DefaultBlockParameterName.PENDING, false).send();
-        BigInteger baseFee = Numeric.decodeQuantity(ethBlock.getBlock().getBaseFeePerGas());
+        BigInteger baseFee = ethBlock.getBlock().getBaseFeePerGas();
         BigInteger minTipToMiner = gasPrice.divide(BigInteger.valueOf(1000)); //always toss some coins to the miner
         result.maxFeePerGas = gasPrice.max(baseFee.add(minTipToMiner));
         result.maxPriorityFeePerGas = result.maxFeePerGas.subtract(baseFee);
