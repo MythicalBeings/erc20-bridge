@@ -1,6 +1,6 @@
 plugins {
     id 'java-library'
-    id 'org.web3j' version '4.8.7'
+    id 'org.web3j' version '4.9.4'
 }
 
 group 'com.jelurida'
@@ -17,7 +17,7 @@ web3j {
 }
 
 dependencies {
-    api("org.web3j:core:4.8.7")
+    api("org.web3j:core:4.9.4")
 }
 
 test {
