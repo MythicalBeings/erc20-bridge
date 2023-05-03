@@ -18,7 +18,7 @@ package com.jelurida.ardor.contracts.interchain.eth;
 import com.jelurida.ardor.contracts.AbstractContractTest;
 import com.jelurida.ardor.contracts.ContractTestHelper;
 import com.jelurida.ardor.contracts.TestApiAddOn;
-import com.jelurida.web3j.utils.txman.RetryingRawTransactionManager;
+import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
 import nxt.Tester;
 import nxt.addons.AddOns;
 import nxt.addons.ContractRunner;

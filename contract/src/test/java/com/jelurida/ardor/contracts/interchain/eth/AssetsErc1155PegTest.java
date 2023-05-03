@@ -15,58 +15,28 @@
 package com.jelurida.ardor.contracts.interchain.eth;
 
 import com.jelurida.web3j.generated.BRIDGE_ERC20;
-import com.jelurida.web3j.utils.Utils;
-import com.jelurida.web3j.utils.txman.RetryingRawTransactionManager;
-import nxt.Constants;
-import nxt.Nxt;
+import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
 import nxt.Tester;
 import nxt.addons.JO;
-import nxt.blockchain.TransactionProcessorImpl;
-import nxt.http.APICall;
-import nxt.http.callers.GetTransactionCall;
-import nxt.http.callers.IssueAssetCall;
-import nxt.http.callers.TransferAssetCall;
-import nxt.util.Convert;
-import nxt.util.JSON;
-import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.web3j.abi.FunctionEncoder;
-import org.web3j.abi.datatypes.Function;
-import org.web3j.abi.datatypes.Utf8String;
 import org.web3j.crypto.Credentials;
-import org.web3j.crypto.ECKeyPair;
 import org.web3j.crypto.Hash;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
-import org.web3j.protocol.core.methods.response.EthEstimateGas;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.rlp.RlpEncoder;
 import org.web3j.rlp.RlpList;
 import org.web3j.rlp.RlpString;
 import org.web3j.tx.Contract;
-import org.web3j.tx.TransactionManager;
-import org.web3j.tx.Transfer;
 import org.web3j.tx.gas.ContractGasProvider;
-import org.web3j.tx.gas.DefaultGasProvider;
 import org.web3j.tx.gas.StaticGasProvider;
 import org.web3j.utils.Numeric;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static nxt.blockchain.ChildChain.IGNIS;
 
 public class AssetsErc1155PegTest extends BasePegTest {
     public static final int ETH_FEE_MULTIPLIER = 20;
