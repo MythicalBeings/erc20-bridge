@@ -77,7 +77,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static final int ARDOR_BLOCK_TIME = Constants.isTestnet ? (Constants.isAutomatedTest ? 1 : Constants.BLOCK_TIME / Constants.TESTNET_ACCELERATION) : Constants.BLOCK_TIME;
     public static final String CONTRACT_ADDRESS_MISSING_ERROR = "contractAddress missing - Please config in contractRunner";
     // public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 720 * 60;
-    public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 180 * 60;
+    public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 720 * 60;
     public static final BigInteger ETH_BLOCK_TIME_ESTIMATION_BLOCK_COUNT = BigInteger.valueOf(1000);
     public static final int DEFAULT_ETH_BLOCK_TIME = 2000;
     public static final long ETH_GAS_PRICE_ESTIMATION_EXPIRATION = 60 * 60;

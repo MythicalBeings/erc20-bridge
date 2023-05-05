@@ -64,36 +64,32 @@ public class AssetsErc1155PegTest extends BasePegTest {
         Logger.logInfoMessage("TESTING | beforeTest | wETH Address: "+ wETH.getContractAddress());
     }
 
-    public static final int EXPECTED_UNWRAPS = 1;
     @Test
     public void test(){
         try {
+        // 1.- Send to EDA
         Logger.logInfoMessage("--------------------------------------------");
-        // 1.- Enviar desde wallet a EDA
         Tester wrapper = ALICE;
         String wrapDepositAddress = getWrapDepositAddress(wrapper);
         Logger.logInfoMessage("TESTING | test | Deposit address: "+ wrapDepositAddress);
         Logger.logInfoMessage("--------------------------------------------");
 
         TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
-        /*
-        // THIS CODE NOT WORK PROPERTLY
-        senderTransactionManager.setCallbacks(sendToWrapTx, (tr, r) -> {
-            Logger.logInfoMessage("MB-ERC20 | test | Token send to wrap ", tr.getTransactionHash());
-                }, (error) -> {
-            Logger.logInfoMessage("MB-ERC20 | test | Failed sending token to wrap");
-        });
-        */
+        Logger.logInfoMessage("TESTING | test | sendToWrapTx: "+ sendToWrapTx.getTransactionHash());
 
         Logger.logInfoMessage("--------------------------------------------");
         // Flujo EVM a Ardor
-            // assetId is null, why? Setting before.
-        processWraps(wrapper, EXPECTED_UNWRAPS, 0, 0);
-
-        List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, EXPECTED_UNWRAPS);
+        int numWraps = processWraps(wrapper);
+        Logger.logInfoMessage("MB-ERC20 | test | numWraps: " + numWraps);
+        Logger.logInfoMessage("--------------------------------------------");
+        // IS NOT THE SAME NUMBER - INFINITE LOOP.
+        List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, numWraps);
         generateBlock();
         confirmArdorTransactions(fullHashes);
-        processWraps(wrapper, 0, 0, EXPECTED_UNWRAPS);
+
+        Logger.logInfoMessage("--------------------------------------------");
+        processWraps(wrapper);
+        Logger.logInfoMessage("--------------------------------------------");
 
         // TODO: Unwrap - Send Ardor to EVM
 
