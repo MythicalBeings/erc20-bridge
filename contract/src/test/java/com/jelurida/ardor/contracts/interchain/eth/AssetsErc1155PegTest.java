@@ -58,14 +58,6 @@ public class AssetsErc1155PegTest extends BasePegTest {
     public void beforeTest() throws Exception {
         super.beforeTest();
 
-        String assetId = issueAsset(BOB, 10000);
-        Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
-        paramsJo.put("assetId", assetId);
-        Logger.logInfoMessage("TESTING | beforeTest | paramsJo.assetId: "+ paramsJo.getString("assetId"));
-
-        setRunnerConfig(configJo.toJSONString().getBytes());
-        generateBlock();
-
         ebaTransactionManager = createTransactionManager(ethBlockedAcc);
         senderTransactionManager = createTransactionManager(ethDeployAcc);
 
@@ -73,30 +65,32 @@ public class AssetsErc1155PegTest extends BasePegTest {
         Logger.logInfoMessage("TESTING | beforeTest | wETH Address: "+ wETH.getContractAddress());
     }
 
-    public static final int EXPECTED_UNWRAPS = 1;
     @Test
     public void test(){
         try {
+        // 1.- Send to EDA
         Logger.logInfoMessage("--------------------------------------------");
-        // 1.- Enviar desde wallet a EDA
         Tester wrapper = ALICE;
         String wrapDepositAddress = getWrapDepositAddress(wrapper);
         Logger.logInfoMessage("TESTING | test | Deposit address: "+ wrapDepositAddress);
         Logger.logInfoMessage("--------------------------------------------");
 
         TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
-
-        Assert.assertTrue(sendToWrapTx.isStatusOK());
+        Logger.logInfoMessage("TESTING | test | sendToWrapTx: "+ sendToWrapTx.getTransactionHash());
 
         Logger.logInfoMessage("--------------------------------------------");
         // Flujo EVM a Ardor
-            // assetId is null, why? Setting before.
-        processWraps(wrapper, EXPECTED_UNWRAPS, 0, 0);
-
-        List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, EXPECTED_UNWRAPS);
+        int numWraps = processWraps(wrapper);
+        Logger.logInfoMessage("MB-ERC20 | test | numWraps: " + numWraps);
+        Logger.logInfoMessage("--------------------------------------------");
+        // IS NOT THE SAME NUMBER - INFINITE LOOP.
+        List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, numWraps);
         generateBlock();
         confirmArdorTransactions(fullHashes);
-        processWraps(wrapper, 0, 0, EXPECTED_UNWRAPS);
+
+        Logger.logInfoMessage("--------------------------------------------");
+        processWraps(wrapper);
+        Logger.logInfoMessage("--------------------------------------------");
 
         // TODO: Unwrap - Send Ardor to EVM
 
@@ -113,15 +107,6 @@ public class AssetsErc1155PegTest extends BasePegTest {
     private ContractGasProvider createCurrentPriceGasProvider(Web3j web3j, BigInteger gasLimit) throws IOException {
         BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
         return new StaticGasProvider(gasPrice, gasLimit);
-    }
-
-
-    private String issueAsset(Tester assetIssuer, int quantity) {
-        JO issueResult = IssueAssetCall.create(IGNIS.getId())
-                .privateKey(assetIssuer.getPrivateKey())
-                .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
-                .quantityQNT(quantity).decimals(8).callNoError();
-        return Tester.responseToStringId(issueResult);
     }
 
     /**

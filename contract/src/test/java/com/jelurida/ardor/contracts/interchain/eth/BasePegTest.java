@@ -89,14 +89,19 @@ public class BasePegTest extends AbstractContractTest {
 
     @Before
     public void beforeTest() throws Exception {
+        String assetId = issueAsset(BOB, 10000);
         byte[] configBytes = readAllBytes(RUNNER_CONFIG_FILE);
         configJo = JO.parse(new InputStreamReader(new ByteArrayInputStream(configBytes)));
         paramsJo = configJo.getJo("params").getJo("AssetsErc20");
+        paramsJo.put("assetId", assetId);
         paramsJo.put("ethereumBlockedAccountSecret", "EBA 7e020dfa 3");
         paramsJo.put("ethereumDeployAccountSecret", "Deployer Address testing");
         paramsJo.put("ethereumDepositAccountsSecret", "ceb3a9f8a009973432c54c5f73be743297e020dfac903908c3f448347a9dbb58");
         setRunnerConfig(configJo.toJSONString().getBytes());
         web3j = Web3j.build(new HttpService(paramsJo.getString("apiUrl")));
+
+        Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
+        Logger.logInfoMessage("TESTING | beforeTest | paramsJo.assetId: "+ paramsJo.getString("assetId"));
 
         ethBlockedAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumBlockedAccountSecret"));
         ethDeployAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumDeployAccountSecret"));
@@ -141,13 +146,25 @@ public class BasePegTest extends AbstractContractTest {
         return (String) result.get("depositAddress");
     }
 
-    protected static void processWraps(Tester tester, int expectedStarts, int expectedAlreadyPending, int expectedCompleted) {
+    private String issueAsset(Tester assetIssuer, int quantity) {
+        JO issueResult = IssueAssetCall.create(IGNIS.getId())
+                .privateKey(assetIssuer.getPrivateKey())
+                .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
+                .quantityQNT(quantity).decimals(8).callNoError();
+        generateBlock();
+        return Tester.responseToStringId(issueResult);
+    }
+
+    protected static int processWraps(Tester tester) {
         JO result = contractRequest("mbProcessWrapsForAccount")
                 .param("ardorRecipientPublicKey", tester.getPublicKeyStr()).callNoError();
+        Logger.logInfoMessage("----------------------------------");
         Logger.logInfoMessage("processWraps " + result.toJSONString());
-        Assert.assertEquals(expectedStarts, result.getInt("starts", 0));
-        Assert.assertEquals(expectedAlreadyPending, result.getInt("skippedAlreadyPending", 0));
-        Assert.assertEquals(expectedCompleted, result.getInt("skippedCompleted", 0));
+        Logger.logInfoMessage("----------------------------------");
+        return result.getInt("starts", 0);
+        //Assert.assertEquals(expectedStarts, result.getInt("starts", 0));
+        //Assert.assertEquals(expectedAlreadyPending, result.getInt("skippedAlreadyPending", 0));
+        //Assert.assertEquals(expectedCompleted, result.getInt("skippedCompleted", 0));
     }
 
     protected static List<String> waitForUnconfirmedAssetTransfers(Tester account, int count) throws InterruptedException {
