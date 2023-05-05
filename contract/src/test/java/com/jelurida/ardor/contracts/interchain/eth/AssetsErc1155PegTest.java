@@ -57,11 +57,6 @@ public class AssetsErc1155PegTest extends BasePegTest {
     public void beforeTest() throws Exception {
         super.beforeTest();
 
-        String assetId = issueAsset(BOB, 10000);
-        Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
-        paramsJo.put("assetId", assetId);
-        Logger.logInfoMessage("TESTING | beforeTest | paramsJo.assetId: "+ paramsJo.getString("assetId"));
-
         ebaTransactionManager = createTransactionManager(ethBlockedAcc);
         senderTransactionManager = createTransactionManager(ethDeployAcc);
 
@@ -115,15 +110,6 @@ public class AssetsErc1155PegTest extends BasePegTest {
     private ContractGasProvider createCurrentPriceGasProvider(Web3j web3j, BigInteger gasLimit) throws IOException {
         BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
         return new StaticGasProvider(gasPrice, gasLimit);
-    }
-
-
-    private String issueAsset(Tester assetIssuer, int quantity) {
-        JO issueResult = IssueAssetCall.create(IGNIS.getId())
-                .privateKey(assetIssuer.getPrivateKey())
-                .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
-                .quantityQNT(quantity).decimals(0).callNoError();
-        return Tester.responseToStringId(issueResult);
     }
 
     /**
