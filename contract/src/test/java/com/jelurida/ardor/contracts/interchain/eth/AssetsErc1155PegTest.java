@@ -23,6 +23,7 @@ import nxt.http.callers.IssueAssetCall;
 import nxt.util.Convert;
 import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.web3j.crypto.Credentials;
@@ -62,6 +63,9 @@ public class AssetsErc1155PegTest extends BasePegTest {
         paramsJo.put("assetId", assetId);
         Logger.logInfoMessage("TESTING | beforeTest | paramsJo.assetId: "+ paramsJo.getString("assetId"));
 
+        setRunnerConfig(configJo.toJSONString().getBytes());
+        generateBlock();
+
         ebaTransactionManager = createTransactionManager(ethBlockedAcc);
         senderTransactionManager = createTransactionManager(ethDeployAcc);
 
@@ -81,14 +85,8 @@ public class AssetsErc1155PegTest extends BasePegTest {
         Logger.logInfoMessage("--------------------------------------------");
 
         TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
-        /*
-        // THIS CODE NOT WORK PROPERTLY
-        senderTransactionManager.setCallbacks(sendToWrapTx, (tr, r) -> {
-            Logger.logInfoMessage("MB-ERC20 | test | Token send to wrap ", tr.getTransactionHash());
-                }, (error) -> {
-            Logger.logInfoMessage("MB-ERC20 | test | Failed sending token to wrap");
-        });
-        */
+
+        Assert.assertTrue(sendToWrapTx.isStatusOK());
 
         Logger.logInfoMessage("--------------------------------------------");
         // Flujo EVM a Ardor
@@ -122,7 +120,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
         JO issueResult = IssueAssetCall.create(IGNIS.getId())
                 .privateKey(assetIssuer.getPrivateKey())
                 .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
-                .quantityQNT(quantity).decimals(0).callNoError();
+                .quantityQNT(quantity).decimals(8).callNoError();
         return Tester.responseToStringId(issueResult);
     }
 
