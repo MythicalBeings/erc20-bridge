@@ -60,6 +60,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
         String assetId = issueAsset(BOB, 10000);
         Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
         paramsJo.put("assetId", assetId);
+        Logger.logInfoMessage("TESTING | beforeTest | paramsJo.assetId: "+ paramsJo.getString("assetId"));
 
         ebaTransactionManager = createTransactionManager(ethBlockedAcc);
         senderTransactionManager = createTransactionManager(ethDeployAcc);
@@ -80,14 +81,18 @@ public class AssetsErc1155PegTest extends BasePegTest {
         Logger.logInfoMessage("--------------------------------------------");
 
         TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
-        ebaTransactionManager.setCallbacks(sendToWrapTx, (tr, r) -> {
+        /*
+        // THIS CODE NOT WORK PROPERTLY
+        senderTransactionManager.setCallbacks(sendToWrapTx, (tr, r) -> {
             Logger.logInfoMessage("MB-ERC20 | test | Token send to wrap ", tr.getTransactionHash());
                 }, (error) -> {
             Logger.logInfoMessage("MB-ERC20 | test | Failed sending token to wrap");
         });
+        */
 
         Logger.logInfoMessage("--------------------------------------------");
         // Flujo EVM a Ardor
+            // assetId is null, why? Setting before.
         processWraps(wrapper, EXPECTED_UNWRAPS, 0, 0);
 
         List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, EXPECTED_UNWRAPS);
