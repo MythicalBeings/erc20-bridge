@@ -26,7 +26,9 @@ import nxt.addons.JA;
 import nxt.addons.JO;
 import nxt.http.callers.GetTransactionCall;
 import nxt.http.callers.GetUnconfirmedTransactionsCall;
+import nxt.http.callers.IssueAssetCall;
 import nxt.http.callers.TriggerContractByRequestCall;
+import nxt.util.Convert;
 import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -36,6 +38,7 @@ import org.junit.BeforeClass;
 import org.slf4j.helpers.SubstituteLogger;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
 
 import java.io.ByteArrayInputStream;
@@ -43,6 +46,7 @@ import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,10 +59,10 @@ public class BasePegTest extends AbstractContractTest {
     public static final String RUNNER_CONFIG_FILE = "../contract/src/test/resources/test_contract_config.json";
     protected JO configJo;
     protected JO paramsJo;
-    protected JO assetToTokenMap;
     protected Web3j web3j;
 
     protected Credentials ethBlockedAcc;
+    protected Credentials ethDeployAcc;
 
     @BeforeClass
     public static void init() {
@@ -89,14 +93,16 @@ public class BasePegTest extends AbstractContractTest {
         configJo = JO.parse(new InputStreamReader(new ByteArrayInputStream(configBytes)));
         paramsJo = configJo.getJo("params").getJo("AssetsErc20");
         paramsJo.put("ethereumBlockedAccountSecret", "EBA 7e020dfa 3");
+        paramsJo.put("ethereumDeployAccountSecret", "Deployer Address testing");
         paramsJo.put("ethereumDepositAccountsSecret", "ceb3a9f8a009973432c54c5f73be743297e020dfac903908c3f448347a9dbb58");
         setRunnerConfig(configJo.toJSONString().getBytes());
-        assetToTokenMap = paramsJo.getJo("assetIdToErc1155IdMap");
         web3j = Web3j.build(new HttpService(paramsJo.getString("apiUrl")));
 
         ethBlockedAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumBlockedAccountSecret"));
+        ethDeployAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumDeployAccountSecret"));
 
         Logger.logInfoMessage("EBA=" + ethBlockedAcc.getAddress());
+        Logger.logInfoMessage("DEPLOY=" + ethDeployAcc.getAddress());
 
         ContractTestHelper.deployContract(AssetsErc20.class);
     }
@@ -128,17 +134,17 @@ public class BasePegTest extends AbstractContractTest {
      * @param tester Tester for which the address is returned
      * @return Ethereum address
      */
-    protected static String getUnwrapDepositAddress(Tester tester) {
-        JO result = contractRequest("getUnwrapDepositAddress")
+    protected static String getWrapDepositAddress(Tester tester) {
+        JO result = contractRequest("mbGetWrapDepositAddress")
                 .param("ardorRecipientPublicKey", tester.getPublicKeyStr()).callNoError();
         Logger.logInfoMessage("response ethDepositAddress: " + result.toJSONString());
         return (String) result.get("depositAddress");
     }
 
-    protected static void processUnwraps(Tester tester, int expectedStarts, int expectedAlreadyPending, int expectedCompleted) {
-        JO result = contractRequest("processUnwrapsForAccount")
+    protected static void processWraps(Tester tester, int expectedStarts, int expectedAlreadyPending, int expectedCompleted) {
+        JO result = contractRequest("mbProcessWrapsForAccount")
                 .param("ardorRecipientPublicKey", tester.getPublicKeyStr()).callNoError();
-        Logger.logInfoMessage("processUnwraps " + result.toJSONString());
+        Logger.logInfoMessage("processWraps " + result.toJSONString());
         Assert.assertEquals(expectedStarts, result.getInt("starts", 0));
         Assert.assertEquals(expectedAlreadyPending, result.getInt("skippedAlreadyPending", 0));
         Assert.assertEquals(expectedCompleted, result.getInt("skippedCompleted", 0));

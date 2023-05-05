@@ -16,8 +16,12 @@ package com.jelurida.ardor.contracts.interchain.eth;
 
 import com.jelurida.web3j.generated.BRIDGE_ERC20;
 import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
+import com.jelurida.web3j.generated.IERC20;
 import nxt.Tester;
 import nxt.addons.JO;
+import nxt.http.callers.IssueAssetCall;
+import nxt.util.Convert;
+import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,6 +29,7 @@ import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Hash;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.rlp.RlpEncoder;
 import org.web3j.rlp.RlpList;
 import org.web3j.rlp.RlpString;
@@ -35,73 +40,85 @@ import org.web3j.utils.Numeric;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+
+import static nxt.blockchain.ChildChain.IGNIS;
 
 public class AssetsErc1155PegTest extends BasePegTest {
     public static final int ETH_FEE_MULTIPLIER = 20;
     private static final long MINTING_CONTRACT_NONCE = 2138;
-    protected BRIDGE_ERC20 erc1155;
+    protected IERC20 wETH;
     private RetryingRawTransactionManager ebaTransactionManager;
+    private RetryingRawTransactionManager senderTransactionManager;
 
     @Before
     public void beforeTest() throws Exception {
         super.beforeTest();
-        //erc1155 = deployOrLoadErc1155Contract();
+
+        String assetId = issueAsset(BOB, 10000);
+        Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
+        paramsJo.put("assetId", assetId);
+
+        ebaTransactionManager = createTransactionManager(ethBlockedAcc);
+        senderTransactionManager = createTransactionManager(ethDeployAcc);
+
+        wETH = IERC20.load(paramsJo.getString("contractAddress"), web3j, senderTransactionManager, createCurrentPriceGasProvider(web3j, BigInteger.valueOf(4_000_000)));
+        Logger.logInfoMessage("TESTING | beforeTest | wETH Address: "+ wETH.getContractAddress());
     }
 
+    public static final int EXPECTED_UNWRAPS = 1;
     @Test
     public void test(){
-        JO pegAddresses = contractRequest("getPegAddresses").callNoError();
-    }
+        try {
+        Logger.logInfoMessage("--------------------------------------------");
+        // 1.- Enviar desde wallet a EDA
+        Tester wrapper = ALICE;
+        String wrapDepositAddress = getWrapDepositAddress(wrapper);
+        Logger.logInfoMessage("TESTING | test | Deposit address: "+ wrapDepositAddress);
+        Logger.logInfoMessage("--------------------------------------------");
 
-    @NotNull
-    private Credentials generateTesterEthAcc(Tester tester) {
-        return AssetsErc20.getCredentialsFromSecret("User's secret on Eth side " + tester.getSecretPhrase());
+        TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
+        ebaTransactionManager.setCallbacks(sendToWrapTx, (tr, r) -> {
+            Logger.logInfoMessage("MB-ERC20 | test | Token send to wrap ", tr.getTransactionHash());
+                }, (error) -> {
+            Logger.logInfoMessage("MB-ERC20 | test | Failed sending token to wrap");
+        });
+
+        Logger.logInfoMessage("--------------------------------------------");
+        // Flujo EVM a Ardor
+        processWraps(wrapper, EXPECTED_UNWRAPS, 0, 0);
+
+        List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, EXPECTED_UNWRAPS);
+        generateBlock();
+        confirmArdorTransactions(fullHashes);
+        processWraps(wrapper, 0, 0, EXPECTED_UNWRAPS);
+
+        // TODO: Unwrap - Send Ardor to EVM
+
+        } catch (Exception e) {
+            Logger.logInfoMessage("MB-ERC20 | test | WRAPPING ERROR in CATCH: " + e.getMessage());
+        }
     }
 
     private List<JO> getWrappingLog() {
         return contractRequest("getWrappingLog").callNoError().getJoList("log");
     }
 
-    private BRIDGE_ERC20 deployOrLoadErc1155Contract() throws Exception {
-        ebaTransactionManager = createTransactionManager(ethBlockedAcc);
-        ContractGasProvider gasProvider = createCurrentPriceGasProvider(web3j, BigInteger.valueOf(4_000_000));
-        String contractAddress = calculateContractAddress(ethBlockedAcc.getAddress(), MINTING_CONTRACT_NONCE);
-        BRIDGE_ERC20 contract = BRIDGE_ERC20.load(contractAddress, web3j, ebaTransactionManager,
-                gasProvider);
-        if (contractNeedsDeployment(contract)) {
-            paramsJo.put("contractAddress", null);
-            setRunnerConfig(configJo.toJSONString().getBytes());
-            JO result = contractRequest("deployEthContract")
-                    .param("uri", "http://jelurida.com/nft/{id}.json")
-                    .param("name", "Ardor To Polygon Test Contract").callNoError();
-            contractAddress = result.getString("ethContractAddress");
-        }
-        paramsJo.put("contractAddress", contractAddress);
-        contract = BRIDGE_ERC20.load(contractAddress, web3j, ebaTransactionManager,
-                gasProvider);
-        return contract;
-    }
-
-    private boolean contractNeedsDeployment(Contract contract) throws IOException {
-        if (!contract.isValid()) {
-            BigInteger ebaNonce = web3j.ethGetTransactionCount(ethBlockedAcc.getAddress(), DefaultBlockParameterName.LATEST)
-                    .send().getTransactionCount();
-            if (!ebaNonce.equals(BigInteger.valueOf(MINTING_CONTRACT_NONCE))) {
-                throw new IllegalStateException("Account " + ethBlockedAcc.getAddress() + " transaction at nonce " +
-                        MINTING_CONTRACT_NONCE + " is not a valid contract (or does not match the currently compiled binaries)." +
-                        " Change MINTING_CONTRACT_NONCE to " + ebaNonce + " to deploy the currently compiled binaries");
-            }
-            return true;
-        }
-        return false;
-    }
-
     @NotNull
     private ContractGasProvider createCurrentPriceGasProvider(Web3j web3j, BigInteger gasLimit) throws IOException {
         BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
         return new StaticGasProvider(gasPrice, gasLimit);
+    }
+
+
+    private String issueAsset(Tester assetIssuer, int quantity) {
+        JO issueResult = IssueAssetCall.create(IGNIS.getId())
+                .privateKey(assetIssuer.getPrivateKey())
+                .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
+                .quantityQNT(quantity).decimals(0).callNoError();
+        return Tester.responseToStringId(issueResult);
     }
 
     /**

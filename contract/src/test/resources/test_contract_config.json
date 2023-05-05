@@ -5,19 +5,19 @@
   "defaultDeadline": 60,
   "params": {
     "AssetsErc20": {
-      "apiUrl": "https://polygon-mumbai.g.alchemy.com/v2/ryfyiOsB2e0JChPhx70hZH0GLJ8WONmr",
+      "apiUrl": "https://polygon-mumbai.g.alchemy.com/v2/Kvbvgw7YDXfJG19DPlBfnxxccLNmAk5g",
       "chainId": 80001,
-      "ethLogsBlockRange": 3500,
-      "ethLogsIterations": 3,
-      "ardorConfirmations": 5,
-      "fastWrappingConfirmations": 5,
-      "fastWrappingMinDeadline": 60,
-      "ethereumConfirmations": 5,
-      "ethereumRetryTimeout": 30,
+      "ethLogsBlockRange": 0,
+      "ethLogsIterations": 1,
+      "ardorConfirmations": 1,
+      "fastWrappingConfirmations": 1,
+      "fastWrappingMinDeadline": 30,
+      "ethereumConfirmations": 1,
+      "ethereumRetryTimeout": 15,
       "ethereumBlockedAccountSecret": "",
       "ethereumDepositAccountsSecret": "",
       "contractAddress": "0xfbbd91eaedd6773dd1d976e75c3de55bb342fdd0",
-      "assetIdToErc20IdMap": {}
+      "assetId": "5748561916300082783"
     }
   }
 }
