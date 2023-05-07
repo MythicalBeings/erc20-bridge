@@ -487,7 +487,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         if (isKnownWrappingToken(tokenAddress)) {
                             Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | isKnownWrappingToken");
                             //check the asset here too because during initialization the blockchain might not have been up-to date
-                            if (!pegContext.validateAsset(Long.valueOf(params.assetId()), true)) {
+                            if (!pegContext.validateAsset(Long.parseUnsignedLong(params.assetId()), true)) {
                                 throw new RuntimeException("MB-ERC20 | mbProcessWrapsForAccount | Found invalid asset: " + pegContext.initializationError);
                             }
                             mbWrapTaskId id = new mbWrapTaskId(log);

@@ -23,6 +23,7 @@ import nxt.http.callers.IssueAssetCall;
 import nxt.util.Convert;
 import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.web3j.crypto.Credentials;
@@ -75,6 +76,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
         Logger.logInfoMessage("--------------------------------------------");
 
         TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
+        Assert.assertTrue(sendToWrapTx.isStatusOK());
         Logger.logInfoMessage("TESTING | test | sendToWrapTx: "+ sendToWrapTx.getTransactionHash());
 
         Logger.logInfoMessage("--------------------------------------------");

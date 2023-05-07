@@ -101,7 +101,6 @@ public class BasePegTest extends AbstractContractTest {
         web3j = Web3j.build(new HttpService(paramsJo.getString("apiUrl")));
 
         Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
-        Logger.logInfoMessage("TESTING | beforeTest | paramsJo.assetId: "+ paramsJo.getString("assetId"));
 
         ethBlockedAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumBlockedAccountSecret"));
         ethDeployAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumDeployAccountSecret"));
