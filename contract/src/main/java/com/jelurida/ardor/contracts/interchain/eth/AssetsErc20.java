@@ -1018,6 +1018,11 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             Logger.logInfoMessage("------------------------------------------------------------");
 
             if (state == WrapState.CHECK_SEND_TO_EBA) {
+                gasPrice = context.getEthGasPrice();
+                Logger.logInfoMessage("MB-ERC20 | mbWrapTask | CHECK_SEND_TO_EBA | START | Gas price: " + gasPrice);
+                setState(WrapState.FUND_DEPOSIT_ACCOUNT);
+                return false;
+                /*
                 Logger.logWarningMessage("MB-ERC20 | mbWrapTask | CHECK_SEND_TO_EBA");
                 //Check if the transfer from the deposit account to EBA was already executed for this unwrap
                 List<Log> logs = getTransfersLogs(context,
@@ -1042,6 +1047,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     Logger.logInfoMessage("MB-ERC20 | mbWrapTask | CHECK_SEND_TO_EBA | PREVIOUSLY PROCESSED TRANSACTION.");
                     return true;
                 }
+
+                 */
             } else if(state == WrapState.FUND_DEPOSIT_ACCOUNT) {
                 Function function = Utils.createTransferFunction(addressEba, this.amount);
                 String data = FunctionEncoder.encode(function);

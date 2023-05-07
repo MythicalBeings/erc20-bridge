@@ -20,6 +20,7 @@ import com.jelurida.web3j.generated.IERC20;
 import nxt.Tester;
 import nxt.addons.JO;
 import nxt.http.callers.IssueAssetCall;
+import nxt.http.callers.TransferAssetCall;
 import nxt.util.Convert;
 import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -84,14 +85,18 @@ public class AssetsErc1155PegTest extends BasePegTest {
         int numWraps = processWraps(wrapper);
         Logger.logInfoMessage("MB-ERC20 | test | numWraps: " + numWraps);
         Logger.logInfoMessage("--------------------------------------------");
-        // IS NOT THE SAME NUMBER - INFINITE LOOP.
+
         List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, numWraps);
+        Logger.logInfoMessage("MB-ERC20 | test | fullHashes Size: " + fullHashes.size());
         generateBlock();
+        numWraps = processWraps(wrapper);
+            Logger.logInfoMessage("MB-ERC20 | test | numWraps: " + numWraps);
+        //Assert.assertEquals(0, numWraps);
         confirmArdorTransactions(fullHashes);
 
-        Logger.logInfoMessage("--------------------------------------------");
-        processWraps(wrapper);
-        Logger.logInfoMessage("--------------------------------------------");
+        //Logger.logInfoMessage("--------------------------------------------");
+        //processWraps(wrapper);
+        //Logger.logInfoMessage("--------------------------------------------");
 
         // TODO: Unwrap - Send Ardor to EVM
 
@@ -108,6 +113,24 @@ public class AssetsErc1155PegTest extends BasePegTest {
     private ContractGasProvider createCurrentPriceGasProvider(Web3j web3j, BigInteger gasLimit) throws IOException {
         BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
         return new StaticGasProvider(gasPrice, gasLimit);
+    }
+
+    private void sendAssetForWrapping(String assetId, Tester sender, int quantityQNT) {
+        Credentials senderEthAcc = generateTesterEthAcc(sender);
+
+        TransferAssetCall.create(IGNIS.getId())
+                .asset(assetId)
+                .privateKey(sender.getPrivateKey())
+                .recipient(ALICE.getId())
+                .quantityQNT(quantityQNT)
+                .messageToEncrypt(senderEthAcc.getAddress())
+                .feeNQT(IGNIS.ONE_COIN)
+                .callNoError();
+    }
+
+    @NotNull
+    private Credentials generateTesterEthAcc(Tester tester) {
+        return AssetsErc20.getCredentialsFromSecret("User's secret on Eth side " + tester.getSecretPhrase());
     }
 
     /**
