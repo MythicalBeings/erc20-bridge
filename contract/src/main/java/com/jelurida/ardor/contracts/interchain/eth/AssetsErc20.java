@@ -823,7 +823,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
         public void ensureAccountSendToEba(mbWrapTask wrapTask) {
             SendToEBATask newTask = new SendToEBATask(wrapTask, this);
-            String taskInternalId = newTask.getAccount().getAddress()+"-"+newTask.getAmount();
+            String taskInternalId = newTask.getAccount().getAddress() + "-" + newTask.getAmount();
             SendToEBATask oldTask = SendToEBATasks.putIfAbsent(taskInternalId, newTask);
             if (oldTask == null) {
                 newTask.scheduleExecution();
@@ -938,7 +938,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static class SendToEBATask extends Task {
         final List<mbWrapTask> waitingTasks = new CopyOnWriteArrayList<>();
         private BigInteger gasPrice;
-        private BigInteger usedGas;
+        private BigInteger estimatedGas;
         private TransactionReceipt receipt;
 
         SendToEBATask(mbWrapTask startingTask, PegContext context) {
@@ -988,11 +988,19 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     return false;
                 }
             } else if (getState() == WrapState.FUND_DEPOSIT_ACCOUNT) {
+                Function function = Utils.createTransferFunction(addressEba, getAmount());
+                String data = FunctionEncoder.encode(function);
+                org.web3j.protocol.core.methods.request.Transaction transaction = new org.web3j.protocol.core.methods.request.Transaction(
+                        address,
+                        null, null, null,
+                        addressEba, BigInteger.ZERO, data);
+
+                estimatedGas = (context.web3j.ethEstimateGas(transaction).send().getAmountUsed()).multiply(BigInteger.valueOf(3));
+
+                BigInteger estimatedTransferTransactionPrice = gasPrice.multiply(estimatedGas);
                 Logger.logInfoMessage("--------------------------------------------------------");
-                gasPrice = context.getEthGasPrice();
-                usedGas = gasPrice.multiply(BigInteger.valueOf(21000));
                 TransactionReceipt receipt = new Transfer(context.web3j, context.ebaTransactionManager)
-                        .sendFunds(address, new BigDecimal(usedGas),
+                        .sendFunds(address, new BigDecimal(estimatedTransferTransactionPrice),
                                 org.web3j.utils.Convert.Unit.WEI).send();
 
                 context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
@@ -1001,7 +1009,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     scheduleExecution();
                 }, this::onFailure);
             } else if (getState() == WrapState.SEND_TO_EBA) {
-                DefaultGasProvider depositContractGasProvider = new DefaultGasProvider();
+                StaticGasProvider depositContractGasProvider = new StaticGasProvider(gasPrice, estimatedGas);
 
                 RetryingRawTransactionManager depositAccountTransactionManager =
                         context.createTransactionManager(context.params, getAccount(), true);
@@ -1011,9 +1019,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         depositAccountTransactionManager,
                         depositContractGasProvider);
 
-                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | SEND_TO_EBA | Sending to " + addressEba + " | wETH Amount: " + getAmount());
-                TransactionReceipt emptyReceipt = contractByDepositAccount
-                        .transfer(addressEba, getAmount()).send();
+                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | SEND_TO_EBA | From: " + address + " | To " + addressEba + " | wETH Amount: " + getAmount());
+                TransactionReceipt emptyReceipt = contractByDepositAccount.transfer(addressEba, getAmount()).send();
 
                 depositAccountTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
                     SendToEBATask.this.receipt = tr;
@@ -1027,6 +1034,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         setState(WrapState.FUND_DEPOSIT_ACCOUNT);
                         scheduleExecution();
                     } else {
+                        Logger.logInfoMessage("MB-ERC20 | SendToEBATask | ONFAILURE");
                         onFailure(error);
                     }
                 });
@@ -1045,13 +1053,14 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
         void onComplete() {
             setState(WrapState.CHECK_EXISTING_SEND);
-            context.SendToEBATasks.remove(getAccount().getAddress());
+            context.SendToEBATasks.remove(getAccount().getAddress() + "-" + getAmount());
             waitingTasks.forEach(Task::scheduleExecution);
         }
 
         @Override
         void onFailure(String error) {
-            context.SendToEBATasks.remove(getAccount().getAddress());
+
+            context.SendToEBATasks.remove(getAccount().getAddress() + "-" + getAmount());
             waitingTasks.forEach(task -> task.onFailure(error));
         }
 
@@ -1200,7 +1209,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         .privateKey(contractRunnerConfig.getPrivateKey())
                         .recipientPublicKey(recipientPublicKey)
                         .recipient(Account.getId(recipientPublicKey))
-                        .asset(Long.valueOf(context.params.assetId()))
+                        .asset(Long.parseUnsignedLong(context.params.assetId()))
                         .quantityQNT(finalAmount)
                         .feeRateNQTPerFXT(feeRate)
                         .encryptedMessageData(encryptedData.getData())

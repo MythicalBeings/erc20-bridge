@@ -86,6 +86,14 @@ public class Utils {
                 Collections.emptyList());
     }
 
+    public static Function createTransferFunction(String operator, BigInteger amount) {
+        return new Function(
+                IERC20.FUNC_TRANSFER,
+                Arrays.asList(new org.web3j.abi.datatypes.Address(160, operator),
+                        new org.web3j.abi.datatypes.Int(amount)),
+                Collections.emptyList());
+    }
+
     public static BigInteger getEventValueBigInteger(EventValues eventValues, int valueIndex) {
         Uint256 uint256 = (Uint256) eventValues.getNonIndexedValues().get(valueIndex);
         return uint256.getValue();

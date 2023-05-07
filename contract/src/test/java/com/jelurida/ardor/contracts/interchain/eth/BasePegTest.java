@@ -89,7 +89,7 @@ public class BasePegTest extends AbstractContractTest {
 
     @Before
     public void beforeTest() throws Exception {
-        String assetId = issueAsset(BOB, 10000);
+        String assetId = issueAsset(BOB, Long.valueOf("100000000000000000"));
         byte[] configBytes = readAllBytes(RUNNER_CONFIG_FILE);
         configJo = JO.parse(new InputStreamReader(new ByteArrayInputStream(configBytes)));
         paramsJo = configJo.getJo("params").getJo("AssetsErc20");
@@ -145,7 +145,7 @@ public class BasePegTest extends AbstractContractTest {
         return (String) result.get("depositAddress");
     }
 
-    private String issueAsset(Tester assetIssuer, int quantity) {
+    private String issueAsset(Tester assetIssuer, long quantity) {
         JO issueResult = IssueAssetCall.create(IGNIS.getId())
                 .privateKey(assetIssuer.getPrivateKey())
                 .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
