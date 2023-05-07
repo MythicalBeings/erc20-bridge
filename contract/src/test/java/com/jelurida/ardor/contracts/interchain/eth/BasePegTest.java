@@ -89,7 +89,9 @@ public class BasePegTest extends AbstractContractTest {
 
     @Before
     public void beforeTest() throws Exception {
-        String assetId = issueAsset(BOB, Long.valueOf("100000000000000000"));
+        Tester owner = new Tester("hope peace happen touch easy pretend worthless talk them indeed wheel state");
+        String assetId = issueAsset(owner, Long.valueOf("100000000000000000"));
+
         byte[] configBytes = readAllBytes(RUNNER_CONFIG_FILE);
         configJo = JO.parse(new InputStreamReader(new ByteArrayInputStream(configBytes)));
         paramsJo = configJo.getJo("params").getJo("AssetsErc20");
