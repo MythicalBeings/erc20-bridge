@@ -676,7 +676,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         private long lastEthGasPriceEstimationTime = 0;
         private RetryingRawTransactionManager ebaTransactionManager;
         private final ConcurrentHashMap<mbWrapTaskId, mbWrapTask> wrapTasks = new ConcurrentHashMap<>();
-        private final ConcurrentHashMap<String, ApprovalTask> approvalTasks = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<String, SendToEBATask> SendToEBATasks = new ConcurrentHashMap<>();
 
         public PegContext() {}
 
@@ -824,9 +824,10 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             return result;
         }
 
-        public void ensureAccountApprovesEba(mbWrapTask wrapTask) {
-            ApprovalTask newTask = new ApprovalTask(wrapTask, this);
-            ApprovalTask oldTask = approvalTasks.putIfAbsent(newTask.getAccount().getAddress(), newTask);
+        public void ensureAccountSendToEba(mbWrapTask wrapTask) {
+            SendToEBATask newTask = new SendToEBATask(wrapTask, this);
+            String taskInternalId = newTask.getAccount().getAddress()+"-"+newTask.getAmount();
+            SendToEBATask oldTask = SendToEBATasks.putIfAbsent(taskInternalId, newTask);
             if (oldTask == null) {
                 newTask.scheduleExecution();
             } else {
@@ -937,13 +938,12 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         }
     }
 
-    public static class ApprovalTask extends Task {
+    public static class SendToEBATask extends Task {
         final List<mbWrapTask> waitingTasks = new CopyOnWriteArrayList<>();
         private BigInteger gasPrice;
-        private BigInteger estimatedGas;
         private TransactionReceipt receipt;
 
-        ApprovalTask(mbWrapTask startingTask, PegContext context) {
+        SendToEBATask(mbWrapTask startingTask, PegContext context) {
             super(context);
             waitingTasks.add(startingTask);
         }
@@ -959,11 +959,11 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         @Override
         public boolean execute() throws Exception {
             String address = getAccount().getAddress();
-            Logger.logInfoMessage("MB-ERC20 | ApprovalTask | address: " + address);
+            Logger.logInfoMessage("MB-ERC20 | SendToEBATask | address: " + address);
             String addressEba = context.ethBlockedAccount.getAddress();
-            Logger.logInfoMessage("MB-ERC20 | ApprovalTask | addressEba: " + addressEba);
+            Logger.logInfoMessage("MB-ERC20 | SendToEBATask | addressEba: " + addressEba);
             String ethContractAddress = context.params.contractAddress();
-            Logger.logInfoMessage("MB-ERC20 | ApprovalTask | ethContractAddress: " + ethContractAddress);
+            Logger.logInfoMessage("MB-ERC20 | SendToEBATask | ethContractAddress: " + ethContractAddress);
 
             if (getState() == WrapState.CHECK_SEND_TO_EBA) {
                 //Check if the transfer from the deposit account to EBA was already executed for this unwrap
@@ -984,36 +984,23 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     onComplete();
                 } else {
                     gasPrice = context.getEthGasPrice();
-                    Logger.logInfoMessage("MB-ERC20 | ApprovalTask | CHECK_SEND_TO_EBA | Gas price: " + gasPrice);
+                    Logger.logInfoMessage("MB-ERC20 | SendToEBATask | CHECK_SEND_TO_EBA | Gas price: " + gasPrice);
                     setState(WrapState.FUND_DEPOSIT_ACCOUNT);
                     return false;
                 }
             } else if (getState() == WrapState.FUND_DEPOSIT_ACCOUNT) {
-
-                Function function = Utils.createSetApprovalForAllFunction(addressEba, getAmount());
-                String data = FunctionEncoder.encode(function);
                 Logger.logInfoMessage("--------------------------------------------------------");
-
-                org.web3j.protocol.core.methods.request.Transaction transaction = new org.web3j.protocol.core.methods.request.Transaction(
-                        address,
-                        null, null, null,
-                        addressEba, BigInteger.ZERO, data);
-
-                estimatedGas = context.web3j.ethEstimateGas(transaction).send().getAmountUsed().multiply(BigInteger.valueOf(2));
-                Logger.logInfoMessage("MB-ERC20 | ApprovalTask | FUND_DEPOSIT_ACCOUNT | estimatedGas: " + estimatedGas);
-
-                BigInteger estimatedApprovalTransactionPrice = gasPrice.multiply(estimatedGas);
-
                 TransactionReceipt receipt = new Transfer(context.web3j, context.ebaTransactionManager)
-                        .sendFunds(address, new BigDecimal(estimatedApprovalTransactionPrice),
+                        .sendFunds(address, new BigDecimal(gasPrice),
                                 org.web3j.utils.Convert.Unit.WEI).send();
+
                 context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
-                    logTransactionReceipt("MB-ERC20 | ApprovalTask | FUND_DEPOSIT_ACCOUNT | Deposit account funding " + address, tr.getTransactionHash());
+                    logTransactionReceipt("MB-ERC20 | SendToEBATask | FUND_DEPOSIT_ACCOUNT | Deposit account funding " + address, tr.getTransactionHash());
                     setState(WrapState.SEND_TO_EBA);
                     scheduleExecution();
                 }, this::onFailure);
             } else if (getState() == WrapState.SEND_TO_EBA) {
-                StaticGasProvider depositContractGasProvider = new StaticGasProvider(gasPrice, estimatedGas);
+                StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
 
                 RetryingRawTransactionManager depositAccountTransactionManager =
                         context.createTransactionManager(context.params, getAccount(), true);
@@ -1025,9 +1012,10 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
                 TransactionReceipt emptyReceipt = contractByDepositAccount
                         .transfer(addressEba, getAmount()).send();
+
                 depositAccountTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
-                    ApprovalTask.this.receipt = tr;
-                    logTransactionReceipt("MB-ERC20 | ApprovalTask | SEND_TO_EBA | Funded by " + address, tr.getTransactionHash());
+                    SendToEBATask.this.receipt = tr;
+                    logTransactionReceipt("MB-ERC20 | SendToEBATask | SEND_TO_EBA | Funded by " + address, tr.getTransactionHash());
                     setState(WrapState.WAIT_APPROVAL_CONFIRMATION);
                     scheduleExecution();
                 }, error -> {
@@ -1043,9 +1031,9 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 //TODO make async
                 TransactionReceipt approvalReceipt = context.waitEthTransactionToConfirm(receipt, context.params.ethereumConfirmations());
                 if (approvalReceipt != null) {
-                    logTransactionReceipt("MB-ERC20 | ApprovalTask | WAIT_APPROVAL_CONFIRMATION | Fund confirmed ", approvalReceipt.getTransactionHash());
+                    logTransactionReceipt("MB-ERC20 | SendToEBATask | WAIT_APPROVAL_CONFIRMATION | Fund confirmed ", approvalReceipt.getTransactionHash());
                 } else {
-                    throw new RuntimeException("B-ERC20 | ApprovalTask | WAIT_APPROVAL_CONFIRMATION | Failed to Approve EBA by " + getAccount().getAddress());
+                    throw new RuntimeException("B-ERC20 | SendToEBATask | WAIT_APPROVAL_CONFIRMATION | Failed to Approve EBA by " + getAccount().getAddress());
                 }
                 onComplete();
             }
@@ -1054,13 +1042,13 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
         void onComplete() {
             setState(WrapState.CHECK_EXISTING_SEND);
-            context.approvalTasks.remove(getAccount().getAddress());
+            context.SendToEBATasks.remove(getAccount().getAddress());
             waitingTasks.forEach(Task::scheduleExecution);
         }
 
         @Override
         void onFailure(String error) {
-            context.approvalTasks.remove(getAccount().getAddress());
+            context.SendToEBATasks.remove(getAccount().getAddress());
             waitingTasks.forEach(task -> task.onFailure(error));
         }
 
@@ -1159,7 +1147,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         public boolean execute() throws Exception {
             if (state == WrapState.CHECK_SEND_TO_EBA) {
                 Logger.logWarningMessage("MB-ERC20 | mbWrapTask | CHECK_SEND_TO_EBA");
-                context.ensureAccountApprovesEba(this);
+                context.ensureAccountSendToEba(this);
             } else if (state == WrapState.CHECK_EXISTING_SEND) {
                 taskIdHash = Crypto.sha256().digest(taskId.toBytes());
 
