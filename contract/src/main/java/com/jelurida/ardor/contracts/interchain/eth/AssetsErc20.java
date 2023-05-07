@@ -481,21 +481,18 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             AtomicReference<Set<mbWrapTaskId>> completedWrapIds = new AtomicReference<>();
             JO response = new JO();
             logs.forEach(log -> {
-                        Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | log: " + log.getAddress() + " | " + log.getBlockNumber() + " | " + log.getTransactionHash());
+                        Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | LOG Address: " + log.getAddress() + " | Block number: " + log.getBlockNumber() + " | TXHash: " + log.getTransactionHash());
                         EventValues eventValues = Contract.staticExtractEventParameters(IERC20.TRANSFER_EVENT, log);
                         String tokenAddress = log.getAddress();
                         if (isKnownWrappingToken(tokenAddress)) {
-                            Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | isKnownWrappingToken");
                             //check the asset here too because during initialization the blockchain might not have been up-to date
                             if (!pegContext.validateAsset(Long.parseUnsignedLong(params.assetId()), true)) {
                                 throw new RuntimeException("MB-ERC20 | mbProcessWrapsForAccount | Found invalid asset: " + pegContext.initializationError);
                             }
                             mbWrapTaskId id = new mbWrapTaskId(log);
                             if (!pegContext.wrapTasks.containsKey(id)) {
-                                Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | Im in !pegContext.wrapTasks.containsKey(id)");
                                 completedWrapIds.compareAndSet(null, getCompletedWrapIds(context, recipientPublicKey));
                                 if (!completedWrapIds.get().contains(id)) {
-                                    Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount!completedWrapIds.get().contains(id)");
                                     BigInteger amount = Utils.getEventValueBigInteger(eventValues, 0);
                                     mbWrapTask newTask = new mbWrapTask(pegContext, context.getConfig(), id,
                                             tokenAddress, amount, log.getBlockNumber(),
@@ -941,6 +938,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static class SendToEBATask extends Task {
         final List<mbWrapTask> waitingTasks = new CopyOnWriteArrayList<>();
         private BigInteger gasPrice;
+        private BigInteger usedGas;
         private TransactionReceipt receipt;
 
         SendToEBATask(mbWrapTask startingTask, PegContext context) {
@@ -963,6 +961,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             String addressEba = context.ethBlockedAccount.getAddress();
             Logger.logInfoMessage("MB-ERC20 | SendToEBATask | addressEba: " + addressEba);
             String ethContractAddress = context.params.contractAddress();
+            Logger.logInfoMessage("MB-ERC20 | SendToEBATask | ethContractAddress: " + ethContractAddress);
             Logger.logInfoMessage("MB-ERC20 | SendToEBATask | ethContractAddress: " + ethContractAddress);
 
             if (getState() == WrapState.CHECK_SEND_TO_EBA) {
@@ -990,8 +989,9 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 }
             } else if (getState() == WrapState.FUND_DEPOSIT_ACCOUNT) {
                 Logger.logInfoMessage("--------------------------------------------------------");
+                gasPrice = context.getEthGasPrice();
                 TransactionReceipt receipt = new Transfer(context.web3j, context.ebaTransactionManager)
-                        .sendFunds(address, new BigDecimal(gasPrice),
+                        .sendFunds(address, new BigDecimal(gasPrice.multiply(BigInteger.valueOf(3))),
                                 org.web3j.utils.Convert.Unit.WEI).send();
 
                 context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
@@ -1010,6 +1010,20 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         depositAccountTransactionManager,
                         depositContractGasProvider);
 
+                // Verificar el saldo disponible antes de enviar la transacción
+                BigInteger newGasPrice = context.web3j.ethGasPrice().send().getGasPrice();
+                BigInteger balance = contractByDepositAccount.balanceOf(getAccount().getAddress()).send();
+                BigInteger totalGasCost = newGasPrice.multiply(BigInteger.valueOf(21000)); // El costo de gas mínimo para una transacción normal
+                if (balance.compareTo(getAmount().add(totalGasCost)) < 0) {
+                    gasPrice = context.getNewGasPrice(gasPrice);
+                    Logger.logInfoMessage("MB-ERC20 | SendToEBATask | balance.compareTo - INSUFFICIENT_FUNDS | NEW GAS: " + gasPrice);
+                    setState(WrapState.FUND_DEPOSIT_ACCOUNT);
+                    throw new Exception("La cuenta no tiene suficiente saldo para cubrir el costo de gas y el valor de la transacción.");
+                }
+
+                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | BTEEEEST ---> " + depositContractGasProvider.getGasPrice("transfer"));
+                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | Balance: " + balance + " | Amount: " + getAmount());
+                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | totalGasCost: " + totalGasCost + " | Amount: " + depositContractGasProvider.getGasPrice());
                 TransactionReceipt emptyReceipt = contractByDepositAccount
                         .transfer(addressEba, getAmount()).send();
 
@@ -1021,6 +1035,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 }, error -> {
                     if (error != null && error.contains(ErrorMsg.INSUFFICIENT_FUNDS)) {
                         gasPrice = context.getNewGasPrice(gasPrice);
+                        Logger.logInfoMessage("MB-ERC20 | SendToEBATask | INSUFFICIENT_FUNDS | NEW GAS: " + gasPrice);
                         setState(WrapState.FUND_DEPOSIT_ACCOUNT);
                         scheduleExecution();
                     } else {

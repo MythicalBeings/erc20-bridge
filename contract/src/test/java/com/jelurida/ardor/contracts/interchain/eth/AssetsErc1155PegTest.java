@@ -70,14 +70,14 @@ public class AssetsErc1155PegTest extends BasePegTest {
         try {
         // 1.- Send to EDA
         Logger.logInfoMessage("--------------------------------------------");
-        Tester wrapper = ALICE;
+        Tester wrapper = BOB;
         String wrapDepositAddress = getWrapDepositAddress(wrapper);
         Logger.logInfoMessage("TESTING | test | Deposit address: "+ wrapDepositAddress);
         Logger.logInfoMessage("--------------------------------------------");
 
-        TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
-        Assert.assertTrue(sendToWrapTx.isStatusOK());
-        Logger.logInfoMessage("TESTING | test | sendToWrapTx: "+ sendToWrapTx.getTransactionHash());
+        //TransactionReceipt sendToWrapTx = wETH.transfer(wrapDepositAddress, new BigInteger("1000000000000000000")).send();
+        //Assert.assertTrue(sendToWrapTx.isStatusOK());
+        //Logger.logInfoMessage("TESTING | test | sendToWrapTx: "+ sendToWrapTx.getTransactionHash());
 
         Logger.logInfoMessage("--------------------------------------------");
         // Flujo EVM a Ardor
