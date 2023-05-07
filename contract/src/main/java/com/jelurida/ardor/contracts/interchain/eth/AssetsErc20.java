@@ -884,7 +884,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         CHECK_SEND_TO_EBA,
         FUND_DEPOSIT_ACCOUNT,
         SEND_TO_EBA,
-        WAIT_APPROVAL_CONFIRMATION,
+        WAIT_ARRIVAL_CONFIRMATION,
         CHECK_EXISTING_SEND,
         TRANSFER_ASSET
     }
@@ -990,8 +990,9 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             } else if (getState() == WrapState.FUND_DEPOSIT_ACCOUNT) {
                 Logger.logInfoMessage("--------------------------------------------------------");
                 gasPrice = context.getEthGasPrice();
+                usedGas = gasPrice.multiply(BigInteger.valueOf(21000));
                 TransactionReceipt receipt = new Transfer(context.web3j, context.ebaTransactionManager)
-                        .sendFunds(address, new BigDecimal(gasPrice.multiply(BigInteger.valueOf(3))),
+                        .sendFunds(address, new BigDecimal(usedGas),
                                 org.web3j.utils.Convert.Unit.WEI).send();
 
                 context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
@@ -1000,7 +1001,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     scheduleExecution();
                 }, this::onFailure);
             } else if (getState() == WrapState.SEND_TO_EBA) {
-                StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
+                DefaultGasProvider depositContractGasProvider = new DefaultGasProvider();
 
                 RetryingRawTransactionManager depositAccountTransactionManager =
                         context.createTransactionManager(context.params, getAccount(), true);
@@ -1010,27 +1011,14 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         depositAccountTransactionManager,
                         depositContractGasProvider);
 
-                // Verificar el saldo disponible antes de enviar la transacción
-                BigInteger newGasPrice = context.web3j.ethGasPrice().send().getGasPrice();
-                BigInteger balance = contractByDepositAccount.balanceOf(getAccount().getAddress()).send();
-                BigInteger totalGasCost = newGasPrice.multiply(BigInteger.valueOf(21000)); // El costo de gas mínimo para una transacción normal
-                if (balance.compareTo(getAmount().add(totalGasCost)) < 0) {
-                    gasPrice = context.getNewGasPrice(gasPrice);
-                    Logger.logInfoMessage("MB-ERC20 | SendToEBATask | balance.compareTo - INSUFFICIENT_FUNDS | NEW GAS: " + gasPrice);
-                    setState(WrapState.FUND_DEPOSIT_ACCOUNT);
-                    throw new Exception("La cuenta no tiene suficiente saldo para cubrir el costo de gas y el valor de la transacción.");
-                }
-
-                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | BTEEEEST ---> " + depositContractGasProvider.getGasPrice("transfer"));
-                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | Balance: " + balance + " | Amount: " + getAmount());
-                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | totalGasCost: " + totalGasCost + " | Amount: " + depositContractGasProvider.getGasPrice());
+                Logger.logInfoMessage("MB-ERC20 | SendToEBATask | SEND_TO_EBA | Sending to " + addressEba + " | wETH Amount: " + getAmount());
                 TransactionReceipt emptyReceipt = contractByDepositAccount
                         .transfer(addressEba, getAmount()).send();
 
                 depositAccountTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
                     SendToEBATask.this.receipt = tr;
                     logTransactionReceipt("MB-ERC20 | SendToEBATask | SEND_TO_EBA | Funded by " + address, tr.getTransactionHash());
-                    setState(WrapState.WAIT_APPROVAL_CONFIRMATION);
+                    setState(WrapState.WAIT_ARRIVAL_CONFIRMATION);
                     scheduleExecution();
                 }, error -> {
                     if (error != null && error.contains(ErrorMsg.INSUFFICIENT_FUNDS)) {
@@ -1042,13 +1030,13 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         onFailure(error);
                     }
                 });
-            } else if (getState() == WrapState.WAIT_APPROVAL_CONFIRMATION) {
+            } else if (getState() == WrapState.WAIT_ARRIVAL_CONFIRMATION) {
                 //TODO make async
                 TransactionReceipt approvalReceipt = context.waitEthTransactionToConfirm(receipt, context.params.ethereumConfirmations());
                 if (approvalReceipt != null) {
-                    logTransactionReceipt("MB-ERC20 | SendToEBATask | WAIT_APPROVAL_CONFIRMATION | Fund confirmed ", approvalReceipt.getTransactionHash());
+                    logTransactionReceipt("MB-ERC20 | SendToEBATask | WAIT_ARRIVAL_CONFIRMATION | Fund confirmed ", approvalReceipt.getTransactionHash());
                 } else {
-                    throw new RuntimeException("B-ERC20 | SendToEBATask | WAIT_APPROVAL_CONFIRMATION | Failed to Approve EBA by " + getAccount().getAddress());
+                    throw new RuntimeException("B-ERC20 | SendToEBATask | WAIT_ARRIVAL_CONFIRMATION | Failed to Approve EBA by " + getAccount().getAddress());
                 }
                 onComplete();
             }
