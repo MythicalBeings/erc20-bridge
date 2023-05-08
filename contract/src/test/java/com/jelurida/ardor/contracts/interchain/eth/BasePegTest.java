@@ -102,7 +102,7 @@ public class BasePegTest extends AbstractContractTest {
         setRunnerConfig(configJo.toJSONString().getBytes());
         web3j = Web3j.build(new HttpService(paramsJo.getString("apiUrl")));
 
-        Logger.logInfoMessage("TESTING | beforeTest | assetId: "+ assetId);
+        Logger.logInfoMessage("TESTING | beforeTest | assetId: " + assetId);
 
         ethBlockedAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumBlockedAccountSecret"));
         ethDeployAcc = AssetsErc20.getCredentialsFromSecret(paramsJo.getString("ethereumDeployAccountSecret"));
@@ -186,7 +186,7 @@ public class BasePegTest extends AbstractContractTest {
 
         Thread.sleep(AssetsErc20.UNCONFIRMED_TX_RETRY_MILLIS + 1000);
 
-        int confirmations = paramsJo.getInt("ardorConfirmations") + 1;
+        int confirmations = paramsJo.getInt("ardorConfirmations") + 3;
         generateBlocks(confirmations);
 
         fullHashes.forEach(fullHash -> {
