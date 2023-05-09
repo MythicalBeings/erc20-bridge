@@ -19,6 +19,7 @@ import com.jelurida.ardor.contracts.AbstractContractTest;
 import com.jelurida.ardor.contracts.ContractTestHelper;
 import com.jelurida.ardor.contracts.TestApiAddOn;
 import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
+import com.jelurida.web3j.generated.IERC20;
 import nxt.Tester;
 import nxt.addons.AddOns;
 import nxt.addons.ContractRunner;
@@ -40,11 +41,14 @@ import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.tx.gas.StaticGasProvider;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -134,12 +138,6 @@ public class BasePegTest extends AbstractContractTest {
                 .param("command", command);
     }
 
-    /**
-     * Returns the address for unwrapping dedicated to the tester. This address is under the control of the peg contract
-     *
-     * @param tester Tester for which the address is returned
-     * @return Ethereum address
-     */
     protected static String getWrapDepositAddress(Tester tester) {
         JO result = contractRequest("mbGetWrapDepositAddress")
                 .param("ardorRecipientPublicKey", tester.getPublicKeyStr()).callNoError();

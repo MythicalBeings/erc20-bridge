@@ -39,6 +39,7 @@ import org.web3j.rlp.RlpList;
 import org.web3j.rlp.RlpString;
 import org.web3j.tx.Contract;
 import org.web3j.tx.gas.ContractGasProvider;
+import org.web3j.tx.gas.DefaultGasProvider;
 import org.web3j.tx.gas.StaticGasProvider;
 import org.web3j.utils.Numeric;
 
@@ -57,6 +58,8 @@ public class AssetsErc1155PegTest extends BasePegTest {
     private RetryingRawTransactionManager ebaTransactionManager;
     private RetryingRawTransactionManager senderTransactionManager;
     private static final BigInteger QNT_FACTOR = new BigInteger("100000000");
+    private static final BigDecimal QNT_FACTOR_DEC = new BigDecimal("100000000");
+    private static final BigInteger WEI_FACTOR = new BigInteger("1000000000000000000");
 
     @Before
     public void beforeTest() throws Exception {
@@ -72,44 +75,166 @@ public class AssetsErc1155PegTest extends BasePegTest {
     @Test
     public void test() {
         try {
+            // Initial check
             Tester wrapper = DAVE;
-
             BigInteger balance = getAssetBalance(wrapper);
-            Assert.assertEquals(BigInteger.ZERO, balance);
+            Assert.assertEquals(QNT_FACTOR.multiply(BigInteger.valueOf(0)), balance);
 
+            // Normal use case
+            normalUseCase(wrapper);
+
+            // Wrap one tx, send another one and try to wrap
+            wrapUseCase(wrapper);
+
+            // Wrap one tx, send another one and try to unwrap
+            // TODO: Trying to process the same transaction several times.?
+            unwrapUseCase();
+
+        } catch (Exception e) {
+            Logger.logInfoMessage("MB-ERC20 | test | ERROR in CATCH: " + e.getMessage());
+        }
+    }
+
+    private void unwrapUseCase() {
+        try {
+            int logSize = getUnwrappingLogSize();
+            // ##################################
+            // UNWRAP: Ardor to EVM
+            // ##################################
+            sendAssetFromOwner(CHUCK, 10);
+            sendAssetForUnwrapping(CHUCK, 1);
+            sendAssetForUnwrapping(CHUCK, 1);
+            sendAssetForUnwrapping(CHUCK, 1);
+            logSize += 3;
+            Assert.assertEquals("success", waitUnwrapping(logSize));
+
+            sendAssetForUnwrapping(CHUCK, 1);
+            logSize++;
+            Assert.assertEquals("success", waitUnwrapping(logSize));
+
+            sendAssetForUnwrapping(CHUCK, 6);
+            logSize++;
+            Assert.assertEquals("success", waitUnwrapping(logSize));
+        } catch (Exception e) {
+            Logger.logInfoMessage("Error in unwrapUseCase | ERROR: " + e.getMessage());
+        }
+    }
+
+    private void wrapUseCase(Tester wrapper) {
+        try {
+            String wrapDepositAddress = getWrapDepositAddress(wrapper);
             // ##################################
             // WRAP: EVM to Ardor
             // ##################################
-            // Testing with 1 TX
-            generateEVMtoArdorWraps(wrapper, 1);
+            generateEthWrapTx(wrapDepositAddress, 1);
+
+            BigInteger ethBalance = getEthBalance(wrapDepositAddress);
+            BigInteger balanceToQNT = ETHtoQNT(ethBalance);
+            BigInteger balance = getAssetBalance(wrapper);
+
+            int numWraps = processWraps(wrapper);
+            Logger.logInfoMessage("First numWraps -> " + numWraps);
+            Assert.assertEquals(1, numWraps);
+
+            generateEthWrapTx(wrapDepositAddress, 1);
+            int wrapStopped = processWraps(wrapper);
+            Logger.logInfoMessage("Second numWraps -> " + wrapStopped);
+            Assert.assertEquals(0, wrapStopped);
+
+            List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, numWraps);
+            generateBlock();
+            confirmArdorTransactions(fullHashes);
+
+            BigInteger expectBalance = balanceToQNT.add(balance);
             balance = getAssetBalance(wrapper);
-            Assert.assertEquals(QNT_FACTOR.multiply(BigInteger.valueOf(1)), balance);
-            // --------------------
-            // Testing with 3 TX
-            generateEVMtoArdorWraps(wrapper, 3);
+            Assert.assertEquals(expectBalance, balance);
+
+            // -------- SECOND PART --------
+
+            ethBalance = getEthBalance(wrapDepositAddress);
+            balanceToQNT = ETHtoQNT(ethBalance);
+            int finalWrap = processWraps(wrapper);
+            Logger.logInfoMessage("Second numWraps -> " + finalWrap);
+            Assert.assertEquals(1, finalWrap);
+
+            List<String> fullHashesFinalWrap = waitForUnconfirmedAssetTransfers(wrapper, finalWrap);
+            generateBlock();
+            confirmArdorTransactions(fullHashesFinalWrap);
+
+            expectBalance = balanceToQNT.add(balance);
             balance = getAssetBalance(wrapper);
-            Assert.assertEquals(QNT_FACTOR.multiply(BigInteger.valueOf(4)), balance);
-
-            // ##################################
-            // Unwrap: Ardor to EVM
-            // ##################################
-            sendAssetFromOwner(CHUCK, 5);
-            sendAssetForUnwrapping(CHUCK, 1);
-
-            Assert.assertEquals("success", waitUnwrapping(1));
-            sendAssetForUnwrapping(CHUCK, 1);
-
-            // WHY COUNT IS 2? - Should be 1
-            Assert.assertEquals("success", waitUnwrapping(2));
-
-            sendAssetForUnwrapping(CHUCK, 3);
-            // Now is 3
-            Assert.assertEquals("success", waitUnwrapping(3));
-
+            Assert.assertEquals(expectBalance, balance);
 
         } catch (Exception e) {
-            Logger.logInfoMessage("MB-ERC20 | test | WRAPPING ERROR in CATCH: " + e.getMessage());
+            Logger.logInfoMessage("Error in wrapUseCase | ERROR: " + e.getMessage());
         }
+    }
+
+    private void normalUseCase(Tester wrapper) {
+        String wrapDepositAddress = getWrapDepositAddress(wrapper);
+        BigInteger ethBalance = getEthBalance(wrapDepositAddress);
+        BigInteger balanceToQNT = ETHtoQNT(ethBalance);
+        // ##################################
+        // WRAP: EVM to Ardor
+        // ##################################
+        // Testing with 1 TX
+        generateEVMtoArdorWraps(wrapper, 1);
+        BigInteger expectBalance = balanceToQNT.add(QNT_FACTOR);
+        BigInteger balance = getAssetBalance(wrapper);
+        Assert.assertEquals(expectBalance, balance);
+        // --------------------
+        // Testing with 3 TX
+        generateEVMtoArdorWraps(wrapper, 3);
+        expectBalance = balance.add(QNT_FACTOR.multiply(BigInteger.valueOf(3)));
+        balance = getAssetBalance(wrapper);
+        Assert.assertEquals(expectBalance, balance);
+
+        // ##################################
+        // Unwrap: Ardor to EVM
+        // ##################################
+        sendAssetFromOwner(CHUCK, 5);
+        sendAssetForUnwrapping(CHUCK, 1);
+
+        Assert.assertEquals("success", waitUnwrapping(1));
+        sendAssetForUnwrapping(CHUCK, 1);
+        Assert.assertEquals("success", waitUnwrapping(2));
+        sendAssetForUnwrapping(CHUCK, 3);
+        Assert.assertEquals("success", waitUnwrapping(3));
+    }
+
+    private BigInteger ETHtoQNT(BigInteger value) {
+        String aux = value.toString();
+        BigDecimal amountInEther = org.web3j.utils.Convert.fromWei(aux, org.web3j.utils.Convert.Unit.ETHER);
+        return amountInEther.multiply(QNT_FACTOR_DEC).toBigIntegerExact();
+    }
+
+    private BigInteger QNTtoWEI(BigInteger value) {
+        BigDecimal amountBigDecimal = new BigDecimal(value);
+        BigDecimal test = amountBigDecimal.divide(BigDecimal.valueOf(100000000));
+        String aux = test.toString();
+        return org.web3j.utils.Convert.toWei(aux, org.web3j.utils.Convert.Unit.ETHER).toBigIntegerExact();
+    }
+
+    protected BigInteger getEthBalance(String ethAccount) {
+        BigInteger balance = BigInteger.ZERO;
+        try {
+            StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
+
+            IERC20 contractByDepositAccount = IERC20.load(paramsJo.getString("contractAddress"),
+                    web3j,
+                    senderTransactionManager,
+                    depositContractGasProvider);
+
+            balance = contractByDepositAccount.balanceOf(ethAccount).send();
+        } catch (Exception e) {
+            Logger.logInfoMessage("ERROR in getEthBalance: " + e.getMessage());
+        }
+        return balance;
+    }
+
+    private int getUnwrappingLogSize() {
+        List<JO> unwrappingLog = getUnwrappingLog();
+        return unwrappingLog.size();
     }
 
     private String waitUnwrapping(int count) {

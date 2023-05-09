@@ -489,7 +489,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             BigInteger balance = contractByDepositAccount.balanceOf(depositAccount.getAddress()).send();
 
             if (balance.compareTo(BigInteger.valueOf(0)) == 1) {
-                mbWrapTaskId id = new mbWrapTaskId(balance);
+                mbWrapTaskId id = new mbWrapTaskId(depositAccount.getAddress(), balance);
                 // TODO: Balance actual 12 | Iniciado con 11. No son iguales. Ejecutaría de nuevo el flujo.
                 // TODO: Debe de ejecutarlo solo para la diferencia (1).
                 if (!pegContext.wrapTasks.containsKey(id)) {
@@ -505,8 +505,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         incrementResponseCounter(response, "skippedAlreadyPending");
                     }
                 } else {
-                    Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | Wrap task " + id + " skippedAlreadyPending " + height);
-                    incrementResponseCounter(response, "skippedAlreadyPending");
+                    Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | Wrap task " + id + " skippedAlreadyRunning " + height);
+                    incrementResponseCounter(response, "skippedAlreadyRunning");
                 }
             } else {
                 Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | BALANCE ZERO | Address " + depositAccount.getAddress() + " | Request wrap at height " + height + " | Balance: " + balance);
@@ -964,9 +964,11 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     }
 
     public static class mbWrapTaskId {
+        private final String address;
         private final BigInteger amount;
 
-        public mbWrapTaskId(BigInteger _amount) {
+        public mbWrapTaskId(String _address, BigInteger _amount) {
+            this.address = _address;
             this.amount = _amount;
         }
 
@@ -975,17 +977,17 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             mbWrapTaskId that = (mbWrapTaskId) o;
-            return amount.equals(that.amount);
+            return address.equals(that.address);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(amount);
+            return Objects.hash(address);
         }
 
         @Override
         public String toString() {
-            return "(" + amount + ")";
+            return "(" + address + " | " + amount + ")";
         }
     }
 
