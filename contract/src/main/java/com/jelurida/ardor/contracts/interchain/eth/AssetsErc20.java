@@ -76,7 +76,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static final int UNCONFIRMED_TX_RETRY_MILLIS = Constants.isTestnet && Constants.isAutomatedTest ? 5000 : 15000;
     public static final int ARDOR_BLOCK_TIME = Constants.isTestnet ? (Constants.isAutomatedTest ? 1 : Constants.BLOCK_TIME / Constants.TESTNET_ACCELERATION) : Constants.BLOCK_TIME;
     public static final String CONTRACT_ADDRESS_MISSING_ERROR = "contractAddress missing - Please config in contractRunner";
-    // public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 720 * 60;
     public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 720 * 60;
     public static final BigInteger ETH_BLOCK_TIME_ESTIMATION_BLOCK_COUNT = BigInteger.valueOf(1000);
     public static final int DEFAULT_ETH_BLOCK_TIME = 2000;
@@ -270,23 +269,20 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             response.put("depositAddress", getWrapDepositAccount(params, ardorRecipientPublicKey).getAddress());
         } else if ("mbProcessWrapsForAccount".equals(command)) {
             String ardorRecipientPublicKey = getArdorRecipientPublicKeyParameter(context, requestParams);
-            if (ardorRecipientPublicKey == null) {
+            if (ardorRecipientPublicKey == null)
                 return context.getResponse();
-            }
             return mbProcessWrapsForAccount(context, ardorRecipientPublicKey);
         } else if ("mbProcessUnwrapsAtHeight".equals(command)) {
             String heightStr = getParameter(context, requestParams, "height");
-            if (heightStr == null) {
+            if (heightStr == null)
                 return context.generateErrorResponse(10001, "Please specify a 'height' parameter");
-            }
             return mbProcessUnwrapsAtHeight(context, Integer.parseInt(heightStr));
         } else if ("mbGetUnwrappingLog".equals(command)) {
             response.put("log", wrappingLog.stream().collect(jsonArrayCollector()));
         } else if ("secretToEthPrivateKey".equals(command)) {
             String secret = getParameter(context, requestParams, "secret");
-            if (secret == null) {
+            if (secret == null)
                 return context.generateErrorResponse(10001, "Please specify a 'secret' parameter");
-            }
             Credentials credentials = getCredentialsFromSecret(secret);
             response.put("address", credentials.getAddress());
             response.put("privateKeyNumeric", credentials.getEcKeyPair().getPrivateKey().toString());

@@ -53,8 +53,6 @@ import java.util.Optional;
 import static nxt.blockchain.ChildChain.IGNIS;
 
 public class AssetsErc1155PegTest extends BasePegTest {
-    public static final int ETH_FEE_MULTIPLIER = 20;
-    private static final long MINTING_CONTRACT_NONCE = 2138;
     protected IERC20 wETH;
     private RetryingRawTransactionManager ebaTransactionManager;
     private RetryingRawTransactionManager senderTransactionManager;
@@ -96,15 +94,15 @@ public class AssetsErc1155PegTest extends BasePegTest {
             // Unwrap: Ardor to EVM
             // ##################################
             sendAssetFromOwner(CHUCK, 5);
-            sendAssetForWrapping(CHUCK, 1);
-            
+            sendAssetForUnwrapping(CHUCK, 1);
+
             Assert.assertEquals("success", waitUnwrapping(1));
-            sendAssetForWrapping(CHUCK, 1);
+            sendAssetForUnwrapping(CHUCK, 1);
 
             // WHY COUNT IS 2? - Should be 1
             Assert.assertEquals("success", waitUnwrapping(2));
 
-            sendAssetForWrapping(CHUCK, 3);
+            sendAssetForUnwrapping(CHUCK, 3);
             // Now is 3
             Assert.assertEquals("success", waitUnwrapping(3));
 
@@ -116,16 +114,16 @@ public class AssetsErc1155PegTest extends BasePegTest {
 
     private String waitUnwrapping(int count) {
         while (true) {
-            List<JO> wrappingLog = getWrappingLog();
-            Logger.logInfoMessage("MB-ERC20 | waitUnwrapping | wrappingLog.size(): " + wrappingLog.size());
-            Assert.assertEquals(count, wrappingLog.size());
+            List<JO> unwrappingLog = getUnwrappingLog();
+            Logger.logInfoMessage("MB-ERC20 | waitUnwrapping | wrappingLog.size(): " + unwrappingLog.size());
+            Assert.assertEquals(count, unwrappingLog.size());
 
-            Optional<JO> error = wrappingLog.stream().filter(log -> log.get("error") != null).findFirst();
+            Optional<JO> error = unwrappingLog.stream().filter(log -> log.get("error") != null).findFirst();
             if (error.isPresent()) {
                 return (String) error.get().get("error");
             }
 
-            if (wrappingLog.stream().allMatch(log -> log.get("success") != null)) {
+            if (unwrappingLog.stream().allMatch(log -> log.get("success") != null)) {
                 return "success";
             }
             try {
@@ -162,7 +160,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
         }
     }
 
-    private List<JO> getWrappingLog() {
+    private List<JO> getUnwrappingLog() {
         return contractRequest("mbGetUnwrappingLog").callNoError().getJoList("log");
     }
 
@@ -207,7 +205,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
         generateBlock();
     }
 
-    private void sendAssetForWrapping(Tester sender, int quantityQNT) {
+    private void sendAssetForUnwrapping(Tester sender, int quantityQNT) {
         String assetId = paramsJo.getString("assetId");
         Credentials senderEthAcc = generateTesterEthAcc(sender);
         Tester owner = new Tester("hope peace happen touch easy pretend worthless talk them indeed wheel state");
