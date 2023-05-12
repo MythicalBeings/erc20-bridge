@@ -76,7 +76,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static final int UNCONFIRMED_TX_RETRY_MILLIS = Constants.isTestnet && Constants.isAutomatedTest ? 5000 : 15000;
     public static final int ARDOR_BLOCK_TIME = Constants.isTestnet ? (Constants.isAutomatedTest ? 1 : Constants.BLOCK_TIME / Constants.TESTNET_ACCELERATION) : Constants.BLOCK_TIME;
     public static final String CONTRACT_ADDRESS_MISSING_ERROR = "contractAddress missing - Please config in contractRunner";
-    public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 720 * 60;
+    public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 360 * 60;
     public static final BigInteger ETH_BLOCK_TIME_ESTIMATION_BLOCK_COUNT = BigInteger.valueOf(1000);
     public static final int DEFAULT_ETH_BLOCK_TIME = 2000;
     public static final long ETH_GAS_PRICE_ESTIMATION_EXPIRATION = 60 * 60;
@@ -732,8 +732,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         public synchronized long getEthBlockDuration() throws IOException {
             long now = System.currentTimeMillis();
             if (now - lastEthBlockTimeEstimationTime > ETH_BLOCK_TIME_ESTIMATION_EXPIRATION * 1000) {
-                Logger.logInfoMessage("MB-ERC20 | getEthBlockDuration | " + now);
                 ethBlockTimeEstimation = estimateEthBlockTime();
+                Logger.logInfoMessage("MB-ERC20 | getEthBlockDuration | ethBlockTimeEstimation: " + ethBlockTimeEstimation);
                 lastEthBlockTimeEstimationTime = now;
             }
             return ethBlockTimeEstimation;
