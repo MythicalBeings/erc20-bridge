@@ -19,7 +19,6 @@ import com.jelurida.ardor.contracts.AbstractContractTest;
 import com.jelurida.ardor.contracts.ContractTestHelper;
 import com.jelurida.ardor.contracts.TestApiAddOn;
 import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
-import com.jelurida.web3j.generated.IERC20;
 import nxt.Tester;
 import nxt.addons.AddOns;
 import nxt.addons.ContractRunner;
@@ -29,28 +28,19 @@ import nxt.http.callers.GetTransactionCall;
 import nxt.http.callers.GetUnconfirmedTransactionsCall;
 import nxt.http.callers.IssueAssetCall;
 import nxt.http.callers.TriggerContractByRequestCall;
-import nxt.util.Convert;
 import nxt.util.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.slf4j.helpers.SubstituteLogger;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
-import org.web3j.tx.gas.DefaultGasProvider;
-import org.web3j.tx.gas.StaticGasProvider;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,14 +128,14 @@ public class BasePegTest extends AbstractContractTest {
                 .param("command", command);
     }
 
-    protected static String getWrapDepositAddress(Tester tester) {
+    protected static String getWrapDepositAddress(@NotNull Tester tester) {
         JO result = contractRequest("mbGetWrapDepositAddress")
                 .param("ardorRecipientPublicKey", tester.getPublicKeyStr()).callNoError();
         Logger.logInfoMessage("response ethDepositAddress: " + result.toJSONString());
         return (String) result.get("depositAddress");
     }
 
-    private String issueAsset(Tester assetIssuer, long quantity) {
+    private String issueAsset(@NotNull Tester assetIssuer, long quantity) {
         JO issueResult = IssueAssetCall.create(IGNIS.getId())
                 .privateKey(assetIssuer.getPrivateKey())
                 .feeNQT(20 * IGNIS.ONE_COIN).name("testA").description("Test A")
@@ -154,7 +144,7 @@ public class BasePegTest extends AbstractContractTest {
         return Tester.responseToStringId(issueResult);
     }
 
-    protected static int processWraps(Tester tester) {
+    protected static int processWraps(@NotNull Tester tester) {
         JO result = contractRequest("mbProcessWrapsForAccount")
                 .param("ardorRecipientPublicKey", tester.getPublicKeyStr()).callNoError();
         Logger.logInfoMessage("----------------------------------");
@@ -166,7 +156,7 @@ public class BasePegTest extends AbstractContractTest {
         //Assert.assertEquals(expectedCompleted, result.getInt("skippedCompleted", 0));
     }
 
-    protected static List<String> waitForUnconfirmedAssetTransfers(Tester account, int count) throws InterruptedException {
+    protected static List<String> waitForUnconfirmedAssetTransfers(@NotNull Tester account, int count) throws InterruptedException {
         while (true) {
             JO jo = GetUnconfirmedTransactionsCall.create(IGNIS.getId()).account(account.getId()).callNoError();
             JA unconfirmedTransactions = jo.getArray("unconfirmedTransactions");
@@ -179,7 +169,7 @@ public class BasePegTest extends AbstractContractTest {
         }
     }
 
-    protected void confirmArdorTransactions(List<String> fullHashes) throws InterruptedException {
+    protected void confirmArdorTransactions(@NotNull List<String> fullHashes) throws InterruptedException {
         Logger.logInfoMessage("confirmArdorTransactions:" + fullHashes);
 
         Thread.sleep(AssetsErc20.UNCONFIRMED_TX_RETRY_MILLIS + 1000);

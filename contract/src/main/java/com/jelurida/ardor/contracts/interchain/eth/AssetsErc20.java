@@ -480,15 +480,21 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
     private JO mbProcessWrapsForAccount(RequestContext context, String recipientPublicKey) {
         try {
+            JO response = new JO();
             Parameters params = context.getParams(Parameters.class);
             Credentials depositAccount = getWrapDepositAccount(params, recipientPublicKey);
+            if (pegContext == null) {
+                Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | ERROR: pegContext is null");
+                return context.generateResponse(response);
+            }
+
             BigInteger height = pegContext.web3j.ethBlockNumber().send().getBlockNumber();
 
             String depositAccountAddress = depositAccount.getAddress();
 
             Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | depositAccount: " + depositAccountAddress + " | height: " + height);
 
-            JO response = new JO();
+
             StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
 
             RetryingRawTransactionManager depositAccountTransactionManager =
@@ -642,7 +648,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         private Parameters params;
         private Web3j web3j;
         private ExecutorService executor;
-        private TransactionalContract ethContract;
         private long ethBlockTimeEstimation = DEFAULT_ETH_BLOCK_TIME;
         private long lastEthBlockTimeEstimationTime = 0;
         private BigInteger ethGasPrice = null;
@@ -684,15 +689,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             ebaTransactionManager = createTransactionManager(params, ethBlockedAccount, true);
             if (Convert.emptyToNull(params.contractAddress()) == null) {
                 initializationError = CONTRACT_ADDRESS_MISSING_ERROR;
-                return;
-            }
-
-            ethContract = new TransactionalContract(false, ethBlockedAccount.getAddress(), web3j,
-                    ebaTransactionManager, new DefaultGasProvider());
-
-            if (ethContract == null) {
-                initializationError = "Cannot set ethContact, is null.";
-                return;
             }
         }
 
@@ -1067,6 +1063,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Task " + taskId + " completed successfully");
                     context.wrapTasks.remove(taskId);
                     break;
+                default:
+                    throw new IllegalStateException("MB-ERC20 | mbWrapTask | Unexpected value: " + state);
             }
             return true;
         }

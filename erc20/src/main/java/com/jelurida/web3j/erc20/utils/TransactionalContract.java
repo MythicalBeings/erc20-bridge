@@ -17,14 +17,9 @@ package com.jelurida.web3j.erc20.utils;
 
 import com.jelurida.web3j.generated.IERC20;
 import org.web3j.protocol.Web3j;
-import org.web3j.protocol.core.DefaultBlockParameterName;
-import org.web3j.tx.Contract;
 import org.web3j.tx.TransactionManager;
 import org.web3j.tx.gas.ContractGasProvider;
-import org.web3j.tx.gas.DefaultGasProvider;
-import org.web3j.tx.gas.StaticGasProvider;
 
-import java.io.IOException;
 import java.math.BigInteger;
 
 public class TransactionalContract {
@@ -32,12 +27,13 @@ public class TransactionalContract {
     private final IERC20 erc20WrappedContract;
     private BigInteger lastSetGasPrice = null;
 
-    public TransactionalContract(boolean isMinter, String contractAddress, Web3j web3j,
+    public TransactionalContract(String contractAddress, Web3j web3j,
                                  TransactionManager transactionManager, ContractGasProvider contractGasProvider) {
         this.web3j = web3j;
         erc20WrappedContract = IERC20.load(contractAddress, web3j, transactionManager, contractGasProvider);
     }
 
+    /*
     public <T extends Contract> T getReadOnly(Class<T> contractClass) {
         return (T) erc20WrappedContract;
     }
@@ -53,4 +49,6 @@ public class TransactionalContract {
         }
         return result;
     }
+
+     */
 }
