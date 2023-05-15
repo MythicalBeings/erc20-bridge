@@ -80,8 +80,8 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
     }
 
     private RetryingRawTransactionManager(Web3j web3j, Credentials credentials, long chainId,
-                                         TransactionReceiptProcessor transactionReceiptProcessor,
-                                         RetryFeeProvider retryFeeProvider) {
+                                          TransactionReceiptProcessor transactionReceiptProcessor,
+                                          RetryFeeProvider retryFeeProvider) {
         super(web3j, credentials, chainId, transactionReceiptProcessor);
         this.web3j = web3j;
         this.chainId = chainId;
@@ -117,8 +117,8 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
         BigInteger nonce = getNonce();
         Fees1559 fees1559 = calculateFees1559(gasPrice);
         RawTransaction rawTransaction =
-                    RawTransaction.createTransaction(chainId, nonce, gasLimit, to, value, data,
-                            fees1559.maxPriorityFeePerGas, fees1559.maxFeePerGas);
+                RawTransaction.createTransaction(chainId, nonce, gasLimit, to, value, data,
+                        fees1559.maxPriorityFeePerGas, fees1559.maxFeePerGas);
 
         return sendPendingTransaction(new PendingTransaction(rawTransaction, false), false, false);
     }
@@ -287,7 +287,9 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
     private Fees1559 calculateFees1559(BigInteger gasPrice) throws IOException {
         Fees1559 result = new Fees1559();
         EthBlock ethBlock = web3j.ethGetBlockByNumber(DefaultBlockParameterName.PENDING, false).send();
-        BigInteger baseFee = ethBlock.getBlock().getBaseFeePerGas();
+        String auxBaseFee = ethBlock.getBlock().getBaseFeePerGas();
+        BigInteger baseFee = Numeric.decodeQuantity(auxBaseFee);
+        //BigInteger baseFee = ethBlock.getBlock().getBaseFeePerGas();
         BigInteger minTipToMiner = gasPrice.divide(BigInteger.valueOf(1000)); //always toss some coins to the miner
         result.maxFeePerGas = gasPrice.max(baseFee.add(minTipToMiner));
         result.maxPriorityFeePerGas = result.maxFeePerGas.subtract(baseFee);
