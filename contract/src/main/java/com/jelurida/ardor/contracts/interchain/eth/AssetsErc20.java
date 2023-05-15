@@ -83,6 +83,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     private final PegContext pegContext = new PegContext();
 
     private static final BigDecimal QNT_FACTOR = new BigDecimal("100000000");
+    private static final BigInteger QNT_FACTOR_INT = new BigInteger("100000000");
 
     private ExecutorService threadPool;
     private final ConcurrentLinkedDeque<JO> wrappingLog = new ConcurrentLinkedDeque<>();
@@ -412,8 +413,10 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     return result;
                 }
 
-                BigInteger amountInETH = org.web3j.utils.Convert.toWei(amountToTransfer.toString(), org.web3j.utils.Convert.Unit.ETHER).toBigIntegerExact();
-                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | recipientAddress: " + recipientAddress + " | amountToTransfer: " + amountToTransfer + " | Parse value: " + amountInETH);
+                BigDecimal amountToTransferDecimal = new BigDecimal(amountToTransfer);
+                String parseAmountToTransfer = (amountToTransferDecimal.divide(QNT_FACTOR)).toString();
+                BigInteger amountInETH = org.web3j.utils.Convert.toWei(parseAmountToTransfer, org.web3j.utils.Convert.Unit.ETHER).toBigIntegerExact();
+                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | recipientAddress: " + recipientAddress + " | amountToTransfer: " + amountToTransfer + " parseAmountToTransfer: " + parseAmountToTransfer + " | Parse value: " + amountInETH);
 
                 StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
                 IERC20 contractByDepositAccount = IERC20.load(pegContext.params.contractAddress(),
