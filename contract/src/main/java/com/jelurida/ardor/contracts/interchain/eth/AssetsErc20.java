@@ -261,7 +261,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         String ardorRecipientPublicKey;
 
         switch (command) {
-            case "getPegAddresses":
+            case "mbGetPegAddresses":
                 response.put("ethereumBlockedAccount", pegContext.ethBlockedAccount.getAddress());
                 response.put("ardorBlockedAccount", context.getAccountRs());
                 break;
@@ -356,7 +356,14 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         JO result = new JO();
         try {
             String fullHash = transaction.getString("fullHash");
+            JO attachment = transaction.getJo("attachment");
+            String assetIdStr = attachment.getString("asset");
             result.put("fullHash", fullHash);
+
+            if (!assetIdStr.equals(pegContext.params.assetId())) {
+                return result;
+            }
+
             JO messageJo = ReadMessageCall.create().chain(ChildChain.IGNIS.getId())
                     .transactionFullHash(fullHash)
                     .retrieve(false)
@@ -386,8 +393,6 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 return result;
             }
 
-            JO attachment = transaction.getJo("attachment");
-            String assetIdStr = attachment.getString("asset");
             long assetId = Long.parseUnsignedLong(assetIdStr);
             String tokenAddress = pegContext.params.contractAddress();
             Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | tokenAddress: " + tokenAddress + " | " + assetIdStr);
@@ -416,7 +421,19 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 BigDecimal amountToTransferDecimal = new BigDecimal(amountToTransfer);
                 String parseAmountToTransfer = (amountToTransferDecimal.divide(QNT_FACTOR)).toString();
                 BigInteger amountInETH = org.web3j.utils.Convert.toWei(parseAmountToTransfer, org.web3j.utils.Convert.Unit.ETHER).toBigIntegerExact();
-                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | recipientAddress: " + recipientAddress + " | amountToTransfer: " + amountToTransfer + " parseAmountToTransfer: " + parseAmountToTransfer + " | Parse value: " + amountInETH);
+                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | recipientAddress: " + recipientAddress + " | wETH: " + parseAmountToTransfer + " | WEI: " + amountInETH);
+
+                /*
+                BigInteger gasPrice = pegContext.getEthGasPrice();
+                Function function = Utils.createTransferFunction(recipientAddress, amountInETH);
+                String data = FunctionEncoder.encode(function);
+                org.web3j.protocol.core.methods.request.Transaction gasTx = new org.web3j.protocol.core.methods.request.Transaction(
+                        pegContext.ethBlockedAccount.getAddress(),
+                        null, null, null,
+                        recipientAddress, BigInteger.ZERO, data);
+
+                BigInteger estimatedGas = (pegContext.web3j.ethEstimateGas(gasTx).send().getAmountUsed()).multiply(BigInteger.valueOf(6));
+                 */
 
                 StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
                 IERC20 contractByDepositAccount = IERC20.load(pegContext.params.contractAddress(),
@@ -434,7 +451,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     result.put("error", error);
                 });
             } else {
-                result.put("error", "MB-ERC20 | mbProcessUnwrapTransaction | Transfers unknown asset " + assetIdStr);
+                result.put("error", "MB-ERC20 | mbProcessUnwrapTransaction | Transfers unknown asset " + assetIdStr + " | ONLY WETH AVAILABLE.");
             }
         } catch (Exception e) {
             context.logErrorMessage(e);
@@ -759,6 +776,14 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
             BigInteger increasedPrice = failedTransactionGasPrice.add(gasPriceIncrease);
 
+            if (ethGasPrice == null) {
+                try {
+                    getEthGasPrice();
+                } catch (Exception e) {
+                    Logger.logInfoMessage("MB-ERC20 | getNewGasPrice | Error in getEthGasPrice");
+                }
+            }
+
             if (increasedPrice.compareTo(ethGasPrice) > 0) {
                 Logger.logInfoMessage("MB-ERC20 | getNewGasPrice | Increasing gas price: " + failedTransactionGasPrice + "+" + gasPriceIncrease +
                         "=" + increasedPrice + " > " + ethGasPrice);
@@ -1018,10 +1043,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     feeRate = Math.addExact(feeRate, feeIncrease);
 
                     BigDecimal amountInEther = org.web3j.utils.Convert.fromWei(amount.toString(), org.web3j.utils.Convert.Unit.ETHER);
-                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Value in ETHER: " + amountInEther);
-
                     BigInteger etherInQNT = amountInEther.multiply(QNT_FACTOR).toBigInteger();
-                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | moreTest: " + etherInQNT);
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | wETH: " + amountInEther + " | QNT: " + etherInQNT);
 
                     TransferAssetCall transferAssetCall = TransferAssetCall.create(ChildChain.IGNIS.getId())
                             .privateKey(contractRunnerConfig.getPrivateKey())
@@ -1042,7 +1065,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                         JO result = transferAssetCall.build().invoke();
                         if (result.getString("fullHash") != null) {
                             String fullHash = result.getString("fullHash");
-                            Logger.logInfoMessage("MMB-ERC20 | mbWrapTask | TRANSFER_ASSET | FullHash: " + fullHash);
+                            Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | FullHash: " + fullHash);
 
                             int expirationTime = getExpirationTime(result.getJo("transactionJSON"));
                             if (context.waitArdorTransactionToConfirm(fullHash, expirationTime)) break;
