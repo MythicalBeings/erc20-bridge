@@ -17,7 +17,6 @@ package com.jelurida.ardor.contracts.interchain.eth;
 
 import com.jelurida.web3j.erc20.utils.ErrorMsg;
 import com.jelurida.web3j.generated.IERC20;
-import com.jelurida.web3j.erc20.utils.TransactionalContract;
 import com.jelurida.web3j.erc20.utils.Utils;
 import com.jelurida.web3j.erc20.utils.protocol.AlchemyHttpService;
 import com.jelurida.web3j.erc20.utils.txman.RetryFeeProvider;
@@ -49,7 +48,6 @@ import org.web3j.crypto.Keys;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
-import org.web3j.protocol.core.RemoteFunctionCall;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.response.*;
 import org.web3j.tx.Contract;
@@ -62,11 +60,9 @@ import org.web3j.utils.Numeric;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static nxt.util.JSON.jsonArrayCollector;
 
@@ -75,7 +71,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static final int DEFAULT_CHILD_BLOCK_DEADLINE = 10 * 60;
     public static final int UNCONFIRMED_TX_RETRY_MILLIS = Constants.isTestnet && Constants.isAutomatedTest ? 5000 : 15000;
     public static final int ARDOR_BLOCK_TIME = Constants.isTestnet ? (Constants.isAutomatedTest ? 1 : Constants.BLOCK_TIME / Constants.TESTNET_ACCELERATION) : Constants.BLOCK_TIME;
-    public static final String CONTRACT_ADDRESS_MISSING_ERROR = "contractAddress missing - Please config in contractRunner";
+    //public static final String CONTRACT_ADDRESS_MISSING_ERROR = "contractAddress missing - Please config in contractRunner";
     public static final long ETH_BLOCK_TIME_ESTIMATION_EXPIRATION = 360 * 60;
     public static final BigInteger ETH_BLOCK_TIME_ESTIMATION_BLOCK_COUNT = BigInteger.valueOf(1000);
     public static final int DEFAULT_ETH_BLOCK_TIME = 2000;
@@ -214,13 +210,21 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
          *
          * @return Ethereum address - string in format '0x' followed by 20 bytes in hex format (40 characters)
          */
+        /*
         @ContractRunnerParameter
         @ContractSetupParameter
         String contractAddress();
 
+         */
         @ContractRunnerParameter
         @ContractSetupParameter
-        String assetId();
+        default JO assetIdToErc20AddressMap() {
+            return null;
+        }
+
+        //@ContractRunnerParameter
+        //@ContractSetupParameter
+        //String assetId();
 
     }
 
@@ -266,7 +270,10 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 response.put("ardorBlockedAccount", context.getAccountRs());
                 break;
             case "mbGetContractAddress":
-                response.put("contractAddress", pegContext.params.contractAddress());
+                String requestedAssetId = getParameter(context, requestParams, "assetId");
+                String contractAddress = pegContext.ardorToErc20.get(Long.parseUnsignedLong(requestedAssetId));
+                if (contractAddress == null) contractAddress = "Unknown";
+                response.put("contractAddress", contractAddress);
                 break;
             case "mbGetWrapDepositAddress":
                 ardorRecipientPublicKey = getArdorRecipientPublicKeyParameter(context, requestParams);
@@ -356,11 +363,15 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         JO result = new JO();
         try {
             String fullHash = transaction.getString("fullHash");
-            JO attachment = transaction.getJo("attachment");
-            String assetIdStr = attachment.getString("asset");
             result.put("fullHash", fullHash);
 
-            if (!assetIdStr.equals(pegContext.params.assetId())) {
+            JO attachment = transaction.getJo("attachment");
+
+            String assetIdStr = attachment.getString("asset");
+            Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | assetIdStr: " + assetIdStr);
+            Long assetId = Long.parseUnsignedLong(assetIdStr);
+
+            if (!pegContext.ardorToErc20.containsKey(assetId)) {
                 return result;
             }
 
@@ -382,6 +393,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
             if (recipientAddress == null) {
                 result.put("error", "message");
+                // SI ENVÍA UN TOKEN DE LOS QUE TENEMOS LISTADOS, SE LO DEVUELVE
                 return result;
             }
 
@@ -393,11 +405,10 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 return result;
             }
 
-            long assetId = Long.parseUnsignedLong(assetIdStr);
-            String tokenAddress = pegContext.params.contractAddress();
-            Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | tokenAddress: " + tokenAddress + " | " + assetIdStr);
+            String tokenAddress = pegContext.ardorToErc20.get(assetId);
 
             if (tokenAddress != null) {
+                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | tokenAddress: " + tokenAddress + " | AssetID: " + assetIdStr);
                 //check the asset here too because during initialization the blockchain might not have been up-to date
                 if (!pegContext.validateAsset(assetId, true)) {
                     throw new RuntimeException("MB-ERC20 | mbProcessUnwrapTransaction | Found invalid asset: " + pegContext.initializationError);
@@ -406,7 +417,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 BigInteger amountToTransfer = new BigInteger((String) attachment.get("quantityQNT"));
 
                 BigInteger height = pegContext.web3j.ethBlockNumber().send().getBlockNumber();
-                List<Log> logs = getTransfersLogs(pegContext, height, pegContext.ethBlockedAccount.getAddress(), recipientAddress, null);
+                List<Log> logs = getTransfersLogs(pegContext, height, pegContext.ethBlockedAccount.getAddress(), recipientAddress, null, tokenAddress);
 
                 Log logFromExistingWrap = logs.stream()
                         .filter(log -> mbIsExistingWrappingLog(context, log, amountToTransfer, fullHash))
@@ -421,37 +432,32 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 BigDecimal amountToTransferDecimal = new BigDecimal(amountToTransfer);
                 String parseAmountToTransfer = (amountToTransferDecimal.divide(QNT_FACTOR)).toString();
                 BigInteger amountInETH = org.web3j.utils.Convert.toWei(parseAmountToTransfer, org.web3j.utils.Convert.Unit.ETHER).toBigIntegerExact();
-                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | recipientAddress: " + recipientAddress + " | wETH: " + parseAmountToTransfer + " | WEI: " + amountInETH);
-
-                /*
-                BigInteger gasPrice = pegContext.getEthGasPrice();
-                Function function = Utils.createTransferFunction(recipientAddress, amountInETH);
-                String data = FunctionEncoder.encode(function);
-                org.web3j.protocol.core.methods.request.Transaction gasTx = new org.web3j.protocol.core.methods.request.Transaction(
-                        pegContext.ethBlockedAccount.getAddress(),
-                        null, null, null,
-                        recipientAddress, BigInteger.ZERO, data);
-
-                BigInteger estimatedGas = (pegContext.web3j.ethEstimateGas(gasTx).send().getAmountUsed()).multiply(BigInteger.valueOf(6));
-                 */
+                Logger.logInfoMessage("MB-ERC20 | mbProcessUnwrapTransaction | recipientAddress: " + recipientAddress + " | EVM: " + parseAmountToTransfer + " | WEI: " + amountInETH);
 
                 StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
-                IERC20 contractByDepositAccount = IERC20.load(pegContext.params.contractAddress(),
+                IERC20 contractByDepositAccount = IERC20.load(tokenAddress,
                         pegContext.web3j,
                         pegContext.ebaTransactionManager,
                         depositContractGasProvider);
 
-                TransactionReceipt emptyReceipt = contractByDepositAccount.transfer(recipientAddress, amountInETH).send();
+                TransactionReceipt emptyReceipt = null;
+                try {
+                    emptyReceipt = contractByDepositAccount.transfer(recipientAddress, amountInETH).send();
+                } catch (Exception e) {
+                    logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | emptyReceipt ERROR: ", e.getMessage());
+                }
 
-                pegContext.ebaTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
-                    logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | Unwapping complete ", tr.getTransactionHash());
-                    result.put("success", tr.getTransactionHash());
-                }, (error) -> {
-                    logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | Unwapping error ", error);
-                    result.put("error", error);
-                });
+                if (emptyReceipt != null) {
+                    pegContext.ebaTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
+                        logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | Unwapping complete ", tr.getTransactionHash());
+                        result.put("success", tr.getTransactionHash());
+                    }, (error) -> {
+                        logTransactionReceipt("MB-ERC20 | mbProcessUnwrapTransaction | Unwapping error ", error);
+                        result.put("error", error);
+                    });
+                }
             } else {
-                result.put("error", "MB-ERC20 | mbProcessUnwrapTransaction | Transfers unknown asset " + assetIdStr + " | ONLY WETH AVAILABLE.");
+                result.put("error", "MB-ERC20 | mbProcessUnwrapTransaction | Transfers unknown asset " + assetIdStr);
             }
         } catch (Exception e) {
             context.logErrorMessage(e);
@@ -504,47 +510,47 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             Parameters params = context.getParams(Parameters.class);
             Credentials depositAccount = getWrapDepositAccount(params, recipientPublicKey);
             if (pegContext == null) {
-                Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | ERROR: pegContext is null");
+                Logger.logInfoMessage("MB-ERC20 | PROCESS WRAPS | ERROR: pegContext is null");
                 return context.generateResponse(response);
             }
 
             BigInteger height = pegContext.web3j.ethBlockNumber().send().getBlockNumber();
-
             String depositAccountAddress = depositAccount.getAddress();
-
-            Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | depositAccount: " + depositAccountAddress + " | height: " + height);
-
 
             StaticGasProvider depositContractGasProvider = new DefaultGasProvider();
 
             RetryingRawTransactionManager depositAccountTransactionManager =
                     pegContext.createTransactionManager(pegContext.params, depositAccount, true);
 
-            IERC20 contractByDepositAccount = IERC20.load(pegContext.params.contractAddress(),
-                    pegContext.web3j,
-                    depositAccountTransactionManager,
-                    depositContractGasProvider);
+            for (Map.Entry<Long, String> entry : pegContext.ardorToErc20.entrySet()) {
+                Long assetId = entry.getKey();
+                String contractAddress = entry.getValue();
 
-            BigInteger balance = contractByDepositAccount.balanceOf(depositAccountAddress).send();
+                IERC20 contractByDepositAccount = IERC20.load(contractAddress,
+                        pegContext.web3j,
+                        depositAccountTransactionManager,
+                        depositContractGasProvider);
 
-            if (balance.compareTo(BigInteger.ZERO) <= 0) {
-                Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | BALANCE ZERO | Address " + depositAccountAddress + " | Request wrap at height " + height + " | Balance: " + balance);
-                return context.generateResponse(response);
-            }
+                BigInteger balance = contractByDepositAccount.balanceOf(depositAccountAddress).send();
+                Logger.logInfoMessage("MB-ERC20 | WRAPS | EDA: " + depositAccountAddress + " | Asset: " + assetId + " | Balance: " + balance + " | Contract: " + contractAddress + " | Height " + height);
 
-            String id = depositAccountAddress;
+                if (balance.compareTo(BigInteger.ZERO) <= 0) {
+                    incrementResponseCounter(response, "zeroBalance");
+                } else {
+                    String taskId = depositAccountAddress + "_" + contractAddress;
+                    mbWrapTask task = pegContext.wrapTasks.putIfAbsent(taskId, new mbWrapTask(pegContext, context.getConfig(), taskId, assetId,
+                            contractAddress, balance, height,
+                            depositAccount, recipientPublicKey));
 
-            mbWrapTask task = pegContext.wrapTasks.putIfAbsent(id, new mbWrapTask(pegContext, context.getConfig(), id,
-                    pegContext.params.contractAddress(), balance, height,
-                    depositAccount, recipientPublicKey));
-
-            if (task == null) {
-                Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | Wrap task " + id + " started at height " + height);
-                pegContext.wrapTasks.get(id).scheduleExecution();
-                incrementResponseCounter(response, "starts");
-            } else {
-                Logger.logInfoMessage("MB-ERC20 | mbProcessWrapsForAccount | Wrap task " + id + " " + "skippedAlreadyRunning at height " + height);
-                incrementResponseCounter(response, "skippedAlreadyRunning");
+                    if (task == null) {
+                        Logger.logInfoMessage("MB-ERC20 | WRAPS | STARTED | Address: " + depositAccountAddress + " | Asset: " + assetId + " | Contract: " + contractAddress);
+                        pegContext.wrapTasks.get(taskId).scheduleExecution();
+                        incrementResponseCounter(response, "starts");
+                    } else {
+                        Logger.logInfoMessage("MB-ERC20 | WRAPS | skippedAlreadyRunning | Address: " + depositAccountAddress + " | Asset: " + assetId + " | Contract: " + contractAddress);
+                        incrementResponseCounter(response, "skippedAlreadyRunning");
+                    }
+                }
             }
 
             return context.generateResponse(response);
@@ -557,7 +563,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
     @NotNull
     private static List<Log> getTransfersLogs(PegContext pegContext, BigInteger lastHeight,
-                                              String from, String to, String value) throws IOException {
+                                              String from, String to, String value, String tokenAddress) throws IOException {
         DefaultBlockParameter fromBlock;
         DefaultBlockParameter toBlock;
         int blockRange = pegContext.params.ethLogsBlockRange();
@@ -579,7 +585,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             EthFilter filter = new EthFilter(
                     fromBlock,
                     toBlock,
-                    pegContext.params.contractAddress())
+                    tokenAddress)
                     //event
                     .addSingleTopic(EventEncoder.encode(IERC20.TRANSFER_EVENT));
 
@@ -664,6 +670,8 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static class PegContext implements RetryFeeProvider {
         private String initializationError = null;
         private Credentials ethBlockedAccount;
+        private final Map<String, Long> erc20ToArdor = new HashMap<>();
+        private final Map<Long, String> ardorToErc20 = new HashMap<>();
         private final Map<Long, JO> assetInfo = new HashMap<>();
         private Parameters params;
         private Web3j web3j;
@@ -690,15 +698,32 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                 return;
             }
 
-            if (Convert.emptyToNull(params.contractAddress()) == null) {
-                initializationError = "contractAddress missing";
-                return;
+            //if (Convert.emptyToNull(params.contractAddress()) == null) {
+            //    initializationError = "contractAddress missing";
+            //    return;
+            //}
+
+            @SuppressWarnings("unchecked")
+            Map<String, String> jo = params.assetIdToErc20AddressMap();
+            if (jo == null) {
+                initializationError = "assetIdToErc20AddressMap missing";
+            } else {
+                jo.forEach((assetIdString, tokenIdString) -> {
+                    Long assetId = Long.parseUnsignedLong(assetIdString);
+                    String contractAddress = tokenIdString.toString();
+                    Logger.logDebugMessage("[MB-ERC20] Check asset... " + assetId + " | Address: " + contractAddress);
+                    if (validateAsset(assetId, true)) {
+                        Logger.logDebugMessage("[MB-ERC20] CHECK OK | " + assetId + " | Address: " + contractAddress);
+                        ardorToErc20.put(assetId, contractAddress);
+                        erc20ToArdor.put(contractAddress, assetId);
+                    }
+                });
             }
 
-            if (Convert.emptyToNull(params.assetId()) == null) {
-                initializationError = "assetId missing";
-                return;
-            }
+            //if (Convert.emptyToNull(params.assetId()) == null) {
+            //    initializationError = "assetId missing";
+            //    return;
+            //}
 
             if (initializationError != null) {
                 return;
@@ -707,9 +732,9 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             this.params = params;
             ethBlockedAccount = getCredentialsFromSecret(params.ethereumBlockedAccountSecret());
             ebaTransactionManager = createTransactionManager(params, ethBlockedAccount, true);
-            if (Convert.emptyToNull(params.contractAddress()) == null) {
-                initializationError = CONTRACT_ADDRESS_MISSING_ERROR;
-            }
+            //if (Convert.emptyToNull(params.contractAddress()) == null) {
+            //    initializationError = CONTRACT_ADDRESS_MISSING_ERROR;
+            //}
         }
 
         @NotNull
@@ -928,6 +953,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
     public static class mbWrapTask extends Task {
         private final ContractRunnerConfig contractRunnerConfig;
         private final String taskId;
+        private final Long assetId;
         private final String tokenAddress;
         private final BigInteger amount;
         private final BigInteger depositEthHeight;
@@ -938,12 +964,13 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
         private BigInteger estimatedGas;
         private TransactionReceipt receipt;
 
-        public mbWrapTask(PegContext pegContext, ContractRunnerConfig config, String id,
+        public mbWrapTask(PegContext pegContext, ContractRunnerConfig config, String id, long assetId,
                           String tokenAddress, BigInteger amount, BigInteger depositEthHeight,
                           Credentials depositAccount, String recipientPublicKey) {
             super(pegContext);
             this.contractRunnerConfig = config;
             this.taskId = id;
+            this.assetId = Long.valueOf(assetId);
             this.tokenAddress = tokenAddress;
             this.amount = amount;
             this.depositEthHeight = depositEthHeight;
@@ -962,7 +989,7 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
             switch (state) {
                 case CHECK_SEND_TO_EBA:
                     gasPrice = context.getEthGasPrice();
-                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | CHECK_SEND_TO_EBA | address: " + depositAccount.getAddress() + " | EBA Address: " + context.ethBlockedAccount.getAddress() + " | ETH Contract: " + context.params.contractAddress() + " | Gas price: " + gasPrice);
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | CHECK_SEND_TO_EBA | EDA: " + depositAccount.getAddress() + " | EBA: " + context.ethBlockedAccount.getAddress() + " | Contract: " + tokenAddress + " | AssetID " + assetId + " | Gas price: " + gasPrice);
                     setState(WrapState.FUND_DEPOSIT_ACCOUNT);
                     scheduleExecution();
                     break;
@@ -978,15 +1005,23 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     estimatedGas = (context.web3j.ethEstimateGas(transaction).send().getAmountUsed()).multiply(BigInteger.valueOf(3));
                     BigInteger estimatedTransferTransactionPrice = gasPrice.multiply(estimatedGas);
 
-                    TransactionReceipt receipt = new Transfer(context.web3j, context.ebaTransactionManager)
-                            .sendFunds(depositAccount.getAddress(), new BigDecimal(estimatedTransferTransactionPrice),
-                                    org.web3j.utils.Convert.Unit.WEI).send();
+                    TransactionReceipt receipt = null;
 
-                    context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
-                        logTransactionReceipt("MB-ERC20 | mbWrapTask | FUND_DEPOSIT_ACCOUNT | Deposit account funding " + depositAccount.getAddress(), tr.getTransactionHash());
-                        setState(WrapState.SEND_TO_EBA);
-                        scheduleExecution();
-                    }, this::onFailure);
+                    try {
+                        receipt = new Transfer(context.web3j, context.ebaTransactionManager)
+                                .sendFunds(depositAccount.getAddress(), new BigDecimal(estimatedTransferTransactionPrice),
+                                        org.web3j.utils.Convert.Unit.WEI).send();
+                    } catch (Exception e) {
+                        Logger.logInfoMessage("MB-ERC20 | mbWrapTask | FUND_DEPOSIT_ACCOUNT | ERROR: " + e.getMessage());
+                    }
+
+                    if (receipt != null) {
+                        context.ebaTransactionManager.setCallbacks(receipt, (tr, p) -> {
+                            logTransactionReceipt("MB-ERC20 | mbWrapTask | FUND_DEPOSIT_ACCOUNT | Deposit account funding " + depositAccount.getAddress(), tr.getTransactionHash());
+                            setState(WrapState.SEND_TO_EBA);
+                            scheduleExecution();
+                        }, this::onFailure);
+                    }
                     break;
 
                 case SEND_TO_EBA:
@@ -995,37 +1030,46 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
                     RetryingRawTransactionManager depositAccountTransactionManager =
                             context.createTransactionManager(context.params, this.depositAccount, true);
 
-                    IERC20 contractByDepositAccount = IERC20.load(context.params.contractAddress(),
+                    IERC20 contractByDepositAccount = IERC20.load(tokenAddress,
                             context.web3j,
                             depositAccountTransactionManager,
                             depositContractGasProvider);
 
-                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | SEND_TO_EBA | From: " + depositAccount.getAddress() + " | To " + context.ethBlockedAccount.getAddress() + " | wETH Amount: " + this.amount);
-                    TransactionReceipt emptyReceipt = contractByDepositAccount.transfer(context.ethBlockedAccount.getAddress(), this.amount).send();
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | SEND_TO_EBA | From: " + depositAccount.getAddress() + " | To " + context.ethBlockedAccount.getAddress() + " | EVM Amount: " + this.amount);
+                    // emotyReceipt null MODIFY CHECK THIS!
+                    TransactionReceipt emptyReceipt = null;
 
-                    depositAccountTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
-                        this.receipt = tr;
-                        logTransactionReceipt("MB-ERC20 | mbWrapTask | SEND_TO_EBA | Funded by " + depositAccount.getAddress(), tr.getTransactionHash());
-                        setState(WrapState.WAIT_ARRIVAL_CONFIRMATION);
-                        scheduleExecution();
-                    }, error -> {
-                        if (error != null && error.contains(ErrorMsg.INSUFFICIENT_FUNDS)) {
-                            gasPrice = context.getNewGasPrice(gasPrice);
-                            Logger.logInfoMessage("MB-ERC20 | mbWrapTask | INSUFFICIENT_FUNDS | NEW GAS: " + gasPrice);
-                            setState(WrapState.FUND_DEPOSIT_ACCOUNT);
+                    try {
+                        emptyReceipt = contractByDepositAccount.transfer(context.ethBlockedAccount.getAddress(), this.amount).send();
+                    } catch (Exception e) {
+                        Logger.logInfoMessage("MB-ERC20 | mbWrapTask | SEND_TO_EBA | ERROR: " + e.getMessage());
+                    }
+
+                    if (emptyReceipt != null) {
+                        depositAccountTransactionManager.setCallbacks(emptyReceipt, (tr, r) -> {
+                            this.receipt = tr;
+                            logTransactionReceipt("MB-ERC20 | mbWrapTask | SEND_TO_EBA | Funded by " + depositAccount.getAddress(), tr.getTransactionHash());
+                            setState(WrapState.WAIT_ARRIVAL_CONFIRMATION);
                             scheduleExecution();
-                        } else {
-                            Logger.logInfoMessage("MB-ERC20 | mbWrapTask | ONFAILURE");
-                            onFailure(error);
-                        }
-                    });
+                        }, error -> {
+                            if (error != null && error.contains(ErrorMsg.INSUFFICIENT_FUNDS)) {
+                                gasPrice = context.getNewGasPrice(gasPrice);
+                                Logger.logInfoMessage("MB-ERC20 | mbWrapTask | INSUFFICIENT_FUNDS | NEW GAS: " + gasPrice);
+                                setState(WrapState.FUND_DEPOSIT_ACCOUNT);
+                                scheduleExecution();
+                            } else {
+                                Logger.logInfoMessage("MB-ERC20 | mbWrapTask | ONFAILURE");
+                                onFailure(error);
+                            }
+                        });
+                    }
                     break;
 
                 case WAIT_ARRIVAL_CONFIRMATION:
                     //TODO make async
                     TransactionReceipt approvalReceipt = context.waitEthTransactionToConfirm(this.receipt, context.params.ethereumConfirmations());
                     if (approvalReceipt != null) {
-                        logTransactionReceipt("MB-ERC20 | mbWrapTask | WAIT_ARRIVAL_CONFIRMATION | wETH confirmed in EBA ", approvalReceipt.getTransactionHash());
+                        logTransactionReceipt("MB-ERC20 | mbWrapTask | WAIT_ARRIVAL_CONFIRMATION | Confirmed in EBA ", approvalReceipt.getTransactionHash());
                         setState(WrapState.TRANSFER_ASSET);
                         scheduleExecution();
                     } else {
@@ -1044,49 +1088,52 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
 
                     BigDecimal amountInEther = org.web3j.utils.Convert.fromWei(amount.toString(), org.web3j.utils.Convert.Unit.ETHER);
                     BigInteger etherInQNT = amountInEther.multiply(QNT_FACTOR).toBigInteger();
-                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | wETH: " + amountInEther + " | QNT: " + etherInQNT);
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | EVM: " + amountInEther + " | QNT: " + etherInQNT);
 
-                    TransferAssetCall transferAssetCall = TransferAssetCall.create(ChildChain.IGNIS.getId())
-                            .privateKey(contractRunnerConfig.getPrivateKey())
-                            .recipientPublicKey(recipientPublicKey)
-                            .recipient(Account.getId(recipientPublicKey))
-                            .asset(Long.parseUnsignedLong(context.params.assetId()))
-                            .quantityQNT(etherInQNT.longValueExact())
-                            .feeRateNQTPerFXT(feeRate)
-                            .compressMessageToEncrypt("false")
-                            .messageToEncryptIsText(false)
-                            .encryptedMessageIsPrunable(true);
+                    if (!etherInQNT.equals(BigInteger.ZERO)) {
+                        TransferAssetCall transferAssetCall = TransferAssetCall.create(ChildChain.IGNIS.getId())
+                                .privateKey(contractRunnerConfig.getPrivateKey())
+                                .recipientPublicKey(recipientPublicKey)
+                                .recipient(Account.getId(recipientPublicKey))
+                                .asset(assetId.longValue())
+                                .quantityQNT(etherInQNT.longValueExact())
+                                .feeRateNQTPerFXT(feeRate)
+                                .compressMessageToEncrypt("false")
+                                .messageToEncryptIsText(false)
+                                .encryptedMessageIsPrunable(true);
 
-                    if (contractRunnerConfig.getDefaultDeadline() > 0)
-                        transferAssetCall.deadline(contractRunnerConfig.getDefaultDeadline());
+                        if (contractRunnerConfig.getDefaultDeadline() > 0)
+                            transferAssetCall.deadline(contractRunnerConfig.getDefaultDeadline());
 
-                    while (true) {
-                        Logger.logDebugMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Asset transfer...");
-                        JO result = transferAssetCall.build().invoke();
-                        if (result.getString("fullHash") != null) {
-                            String fullHash = result.getString("fullHash");
-                            Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | FullHash: " + fullHash);
+                        while (true) {
+                            Logger.logDebugMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Asset transfer...");
+                            JO result = transferAssetCall.build().invoke();
+                            if (result.getString("fullHash") != null) {
+                                String fullHash = result.getString("fullHash");
+                                Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | FullHash: " + fullHash);
 
-                            int expirationTime = getExpirationTime(result.getJo("transactionJSON"));
-                            if (context.waitArdorTransactionToConfirm(fullHash, expirationTime)) break;
+                                int expirationTime = getExpirationTime(result.getJo("transactionJSON"));
+                                if (context.waitArdorTransactionToConfirm(fullHash, expirationTime)) break;
 
-                            long increase = Math.multiplyExact(feeRate, context.params.ardorRetryFeeOverpayPercent()) / 100;
-                            Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Increasing Ardor transaction fee rate from " + feeRate + " with " + increase);
-                            feeRate = Math.addExact(feeRate, increase);
-                            transferAssetCall.feeRateNQTPerFXT(feeRate);
+                                long increase = Math.multiplyExact(feeRate, context.params.ardorRetryFeeOverpayPercent()) / 100;
+                                Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Increasing Ardor transaction fee rate from " + feeRate + " with " + increase);
+                                feeRate = Math.addExact(feeRate, increase);
+                                transferAssetCall.feeRateNQTPerFXT(feeRate);
 
-                            while (Nxt.getEpochTime() < expirationTime + Constants.MAX_TIMEDRIFT)
-                                Thread.sleep(500);
+                                while (Nxt.getEpochTime() < expirationTime + Constants.MAX_TIMEDRIFT)
+                                    Thread.sleep(500);
 
-                            //check again if the transaction was confirmed since waitArdorTransactionToConfirm
-                            // assumes the default DEFAULT_CHILD_BLOCK_DEADLINE, but some bundler may use other value
-                            if (context.waitArdorTransactionToConfirm(fullHash, expirationTime))
-                                break;
-                        } else {
-                            throw new RuntimeException("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Send unwrapped tokens failed: " + result.getString("errorDescription"));
+                                //check again if the transaction was confirmed since waitArdorTransactionToConfirm
+                                // assumes the default DEFAULT_CHILD_BLOCK_DEADLINE, but some bundler may use other value
+                                if (context.waitArdorTransactionToConfirm(fullHash, expirationTime))
+                                    break;
+                            } else {
+                                throw new RuntimeException("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Send unwrapped tokens failed: " + result.getString("errorDescription"));
+                            }
                         }
+                        Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Task " + taskId + " completed successfully");
                     }
-                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Task " + taskId + " completed successfully");
+                    Logger.logInfoMessage("MB-ERC20 | mbWrapTask | TRANSFER_ASSET | Task " + taskId + " removed successfully");
                     context.wrapTasks.remove(taskId);
                     break;
                 default:

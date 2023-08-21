@@ -77,6 +77,8 @@ public class BasePegTest extends AbstractContractTest {
         properties.put("nxt.isLightClient", "false");
         properties.put("contract.manager.secretPhrase", "hope peace happen touch easy pretend worthless talk them indeed wheel state");
         properties.put("contract.manager.feeNQT", "100000000");
+
+
         initNxt(properties);
         initBlockchainTest();
     }
@@ -90,6 +92,9 @@ public class BasePegTest extends AbstractContractTest {
         configJo = JO.parse(new InputStreamReader(new ByteArrayInputStream(configBytes)));
         paramsJo = configJo.getJo("params").getJo("AssetsErc20");
         paramsJo.put("assetId", assetId);
+        JO assetIdToErc20AddressMap = new JO();
+        assetIdToErc20AddressMap.put(assetId, "0xFBBD91eaeDD6773dD1d976E75C3de55bb342FdD0");
+        paramsJo.put("assetIdToErc20AddressMap", assetIdToErc20AddressMap);
         paramsJo.put("ethereumBlockedAccountSecret", "EBA 7e020dfa 3");
         paramsJo.put("ethereumDeployAccountSecret", "Deployer Address testing");
         paramsJo.put("ethereumDepositAccountsSecret", "ceb3a9f8a009973432c54c5f73be743297e020dfac903908c3f448347a9dbb58");

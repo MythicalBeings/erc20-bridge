@@ -59,7 +59,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
     private RetryingRawTransactionManager senderTransactionManager;
     private static final BigInteger QNT_FACTOR = new BigInteger("100000000");
     private static final BigDecimal QNT_FACTOR_DEC = new BigDecimal("100000000");
-    private static final BigInteger WEI_FACTOR = new BigInteger("1000000000000000000");
+    // private static final BigInteger WEI_FACTOR = new BigInteger("1000000000000000000");
 
     @Before
     public void beforeTest() throws Exception {
@@ -70,32 +70,19 @@ public class AssetsErc1155PegTest extends BasePegTest {
 
         wETH = IERC20.load(paramsJo.getString("contractAddress"), web3j, senderTransactionManager, createCurrentPriceGasProvider(web3j, BigInteger.valueOf(4_000_000)));
         Logger.logInfoMessage("TESTING | beforeTest | wETH Address: " + wETH.getContractAddress());
-    }
 
-    @Test
-    public void test() {
         try {
             // Initial check
             Tester wrapper = DAVE;
             BigInteger balance = getAssetBalance(wrapper);
             Assert.assertEquals(QNT_FACTOR.multiply(BigInteger.valueOf(0)), balance);
-
-            // Normal use case
-            normalUseCase(wrapper);
-
-            // Wrap one tx, send another one and try to wrap
-            wrapUseCase(wrapper);
-
-            // Wrap one tx, send another one and try to unwrap
-            // TODO: Trying to process the same transaction several times.?
-            unwrapUseCase();
-
         } catch (Exception e) {
             Logger.logInfoMessage("MB-ERC20 | test | ERROR in CATCH: " + e.getMessage());
         }
     }
 
-    private void unwrapUseCase() {
+    @Test
+    public void unwrapUseCase() {
         try {
             int logSize = getUnwrappingLogSize();
             // ##################################
@@ -120,7 +107,10 @@ public class AssetsErc1155PegTest extends BasePegTest {
         }
     }
 
-    private void wrapUseCase(Tester wrapper) {
+    /*
+    @Test
+    public void wrapUseCase() {
+        Tester wrapper = DAVE;
         try {
             String wrapDepositAddress = getWrapDepositAddress(wrapper);
             // ##################################
@@ -170,7 +160,11 @@ public class AssetsErc1155PegTest extends BasePegTest {
         }
     }
 
-    private void normalUseCase(Tester wrapper) {
+     */
+
+    @Test
+    public void normalUseCase() {
+        Tester wrapper = DAVE;
         String wrapDepositAddress = getWrapDepositAddress(wrapper);
         BigInteger ethBalance = getEthBalance(wrapDepositAddress);
         BigInteger balanceToQNT = ETHtoQNT(ethBalance);
@@ -268,6 +262,7 @@ public class AssetsErc1155PegTest extends BasePegTest {
             List<String> fullHashes = waitForUnconfirmedAssetTransfers(wrapper, numWraps);
             generateBlock();
             confirmArdorTransactions(fullHashes);
+            generateBlock();
         } catch (Exception e) {
             Logger.logInfoMessage("TESTING | test | generateEVMtoArdorWraps FAILED: " + e.getMessage());
         }

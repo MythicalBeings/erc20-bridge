@@ -16,8 +16,9 @@
       "ethereumRetryTimeout": 15,
       "ethereumBlockedAccountSecret": "",
       "ethereumDepositAccountsSecret": "",
-      "contractAddress": "0xfbbd91eaedd6773dd1d976e75c3de55bb342fdd0",
-      "assetId": ""
+      "contractAddress": "0xFBBD91eaeDD6773dD1d976E75C3de55bb342FdD0",
+      "assetIdToErc20AddressMap": {
+      }
     }
   }
 }
