@@ -204,27 +204,12 @@ public class AssetsErc20 extends AbstractContract<Object, Object> {
          */
         @ContractRunnerParameter
         String ethereumDepositAccountsSecret();
-
-        /**
-         * The contract address which will be managing the tokens on ethereum side. Must implement
-         *
-         * @return Ethereum address - string in format '0x' followed by 20 bytes in hex format (40 characters)
-         */
-        /*
-        @ContractRunnerParameter
-        @ContractSetupParameter
-        String contractAddress();
-
-         */
+        
         @ContractRunnerParameter
         @ContractSetupParameter
         default JO assetIdToErc20AddressMap() {
             return null;
         }
-
-        //@ContractRunnerParameter
-        //@ContractSetupParameter
-        //String assetId();
 
     }
 
