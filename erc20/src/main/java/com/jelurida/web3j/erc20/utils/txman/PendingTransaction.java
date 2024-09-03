@@ -20,12 +20,15 @@ import org.web3j.crypto.transaction.type.Transaction1559;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class PendingTransaction {
     private final boolean isNonceUnstuck;
     private RawTransaction rawTransaction;
     private int retries;
-    private EthSendTransaction lastSendResponse;
+    private final List<EthSendTransaction> sendResponses = new ArrayList<>();
 
     private AcceptanceCallback acceptanceCallback;
     private FailureCallback failureCallback;
@@ -44,11 +47,11 @@ public class PendingTransaction {
     }
 
     public void setAcceptedToMemPool(EthSendTransaction ethSendTransaction) {
-        lastSendResponse = ethSendTransaction;
+        sendResponses.add(ethSendTransaction);
     }
 
-    public EthSendTransaction getLastSendResponse() {
-        return lastSendResponse;
+    public List<EthSendTransaction> getSendResponses() {
+        return sendResponses;
     }
 
     private Transaction1559 getRawTx1559() {
@@ -60,7 +63,7 @@ public class PendingTransaction {
     }
 
     void retryChangeNonce(BigInteger newNonce) {
-        if (lastSendResponse != null) {
+        if (!sendResponses.isEmpty()) {
             throw new IllegalStateException("Cannot change nonce. Transaction is already accepted to the mempool");
         }
         Transaction1559 rawTx1559 = getRawTx1559();
@@ -107,7 +110,8 @@ public class PendingTransaction {
     public String toString() {
         return "PendingTransaction{" +
                 "isNonceUnstuck=" + isNonceUnstuck +
-                (lastSendResponse == null ? "" : ", lastMemPoolHash='" + lastSendResponse.getTransactionHash() + '\'') +
+                ", sendResponses=" + sendResponses.stream().map(EthSendTransaction::getTransactionHash).
+                collect(Collectors.joining(", ")) +
                 ", retries=" + retries +
                 ", nonce=" + rawTransaction.getNonce() +
                 ", to=" + rawTransaction.getTo() +

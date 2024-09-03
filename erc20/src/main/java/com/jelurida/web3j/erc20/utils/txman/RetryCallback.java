@@ -15,31 +15,50 @@
 
 package com.jelurida.web3j.erc20.utils.txman;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.exceptions.TransactionException;
 import org.web3j.tx.response.Callback;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class RetryCallback implements Callback {
-    private RetryingRawTransactionManager transactionManager;
+    static final Logger log = LoggerFactory.getLogger(RetryCallback.class);
+    private final List<RetryingRawTransactionManager> transactionManagers = new ArrayList<>();
 
     @Override
     public void accept(TransactionReceipt transactionReceipt) {
-        transactionManager.transactionComplete(transactionReceipt);
+        for (RetryingRawTransactionManager tm : transactionManagers) {
+            if (tm.hasPendingTransaction(transactionReceipt.getTransactionHash())) {
+                tm.transactionComplete(transactionReceipt);
+                return;
+            }
+        }
+        log.warn("Transaction already removed from pending set of all transaction managers " +
+                transactionReceipt.getTransactionHash() + " managers count=" + transactionManagers.size());
     }
 
     @Override
     public void exception(Exception e) {
         RetryingRawTransactionManager.log.error("Exception when creating Ethereum transaction", e);
         if (e instanceof TransactionException) {
-            ((TransactionException) e).getTransactionHash().ifPresent(hash -> transactionManager.retryTimedOutTransaction(hash, true));
+            ((TransactionException) e).getTransactionHash().ifPresent(hash -> {
+                for (RetryingRawTransactionManager tm : transactionManagers) {
+                    if (tm.hasPendingTransaction(hash)) {
+                        tm.retryTimedOutTransaction(hash, true);
+                    }
+                }
+            });
         }
     }
 
-    public RetryingRawTransactionManager getTransactionManager() {
-        return transactionManager;
+    public void addTransactionManager(RetryingRawTransactionManager transactionManager) {
+        this.transactionManagers.add(transactionManager);
     }
 
-    public void setTransactionManager(RetryingRawTransactionManager transactionManager) {
-        this.transactionManager = transactionManager;
+    public void removeTransactionManager(RetryingRawTransactionManager transactionManager) {
+        this.transactionManagers.remove(transactionManager);
     }
 }

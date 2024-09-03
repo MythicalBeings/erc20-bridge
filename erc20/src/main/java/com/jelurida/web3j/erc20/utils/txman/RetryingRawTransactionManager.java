@@ -32,10 +32,10 @@ import org.web3j.tx.Transfer;
 import org.web3j.tx.response.PollingTransactionReceiptProcessor;
 import org.web3j.tx.response.TransactionReceiptProcessor;
 import org.web3j.utils.Async;
-import org.web3j.utils.Numeric;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -59,24 +59,27 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
     private final NavigableSet<BigInteger> pendingNonces = new ConcurrentSkipListSet<>();
     private final RetryFeeProvider retryFeeProvider;
 
-    public static RetryingRawTransactionManager create(Web3j web3j, Credentials credentials, long chainId,
-                                                       int pollingAttemptsPerTxHash, long pollingFrequency,
-                                                       boolean isAsyncReceiptProcessor,
-                                                       RetryFeeProvider retryFeeProvider) {
+    public static RetryReceiptProcessor createRetryReceiptProcessor(Web3j web3j, int pollingAttemptsPerTxHash, long pollingFrequency) {
         RetryCallback callback = new RetryCallback();
-        TransactionReceiptProcessor transactionReceiptProcessor;
-        if (isAsyncReceiptProcessor) {
-            transactionReceiptProcessor = new FixedReceiptProcessor(web3j, callback, pollingAttemptsPerTxHash,
-                    pollingFrequency);
-        } else {
-            transactionReceiptProcessor = new PollingTransactionReceiptProcessor(web3j, pollingFrequency,
-                    pollingAttemptsPerTxHash);
-        }
+        return new RetryReceiptProcessor(web3j, callback, pollingAttemptsPerTxHash,
+                pollingFrequency);
+    }
 
+    public static RetryingRawTransactionManager create(Web3j web3j, Credentials credentials, long chainId,
+                                                       TransactionReceiptProcessor transactionReceiptProcessor,
+                                                       RetryFeeProvider retryFeeProvider) {
         RetryingRawTransactionManager result = new RetryingRawTransactionManager(web3j, credentials, chainId,
                 transactionReceiptProcessor, retryFeeProvider);
-        callback.setTransactionManager(result);
+        if (transactionReceiptProcessor instanceof RetryReceiptProcessor) {
+            ((RetryReceiptProcessor)transactionReceiptProcessor).getCallback().addTransactionManager(result);
+        }
         return result;
+    }
+
+    public void shutdown() {
+        if (transactionReceiptProcessor instanceof RetryReceiptProcessor) {
+            ((RetryReceiptProcessor)transactionReceiptProcessor).getCallback().removeTransactionManager(this);
+        }
     }
 
     private RetryingRawTransactionManager(Web3j web3j, Credentials credentials, long chainId,
@@ -100,7 +103,7 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
     protected TransactionReceipt executeTransaction(BigInteger gasPrice, BigInteger gasLimit, String to, String data, BigInteger value, boolean constructor) throws IOException, TransactionException {
         try {
             TransactionReceipt transactionReceipt = super.executeTransaction(gasPrice, gasLimit, to, data, value, constructor);
-            if (transactionReceiptProcessor instanceof PollingTransactionReceiptProcessor) {
+            if (isPolling()) {
                 transactionComplete(transactionReceipt);
             }
             return transactionReceipt;
@@ -173,7 +176,11 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
 
     EthSendTransaction retryTimedOutTransaction(String hash, boolean asyncRetry) {
         PendingTransaction pendingTransaction = pendingTransactions.remove(hash);
-        return retryTransaction(pendingTransaction, TRANSACTION_TIMEOUT_ERROR, asyncRetry, true);
+        if (pendingTransaction != null) {
+            return retryTransaction(pendingTransaction, TRANSACTION_TIMEOUT_ERROR, asyncRetry, true);
+        } else {
+            return null;
+        }
     }
 
     private EthSendTransaction retryTransaction(PendingTransaction pendingTransaction, String error, boolean asyncRetry, boolean waitForReceipt) {
@@ -208,15 +215,24 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
                             //success - this nonce was already unstuck
                             return null;
                         } else {
-                            EthSendTransaction lastSendResponse = pendingTransaction.getLastSendResponse();
-                            if (lastSendResponse != null) {
-                                log.info("Nonce too low when transaction was already in the mempool");
-                                TransactionReceipt transactionReceipt =
-                                        transactionReceiptProcessor.waitForTransactionReceipt(lastSendResponse.getTransactionHash());
-                                if (transactionReceiptProcessor instanceof PollingTransactionReceiptProcessor) {
-                                    transactionComplete(transactionReceipt);
+                            List<EthSendTransaction> sendResponses = pendingTransaction.getSendResponses();
+                            if (!sendResponses.isEmpty()) {
+                                log.info("Nonce too low when transaction was already in the mempool polling=" + isPolling());
+                                TransactionException waitException = null;
+                                for (EthSendTransaction lastSendResponse : sendResponses) {
+                                    try {
+                                        TransactionReceipt transactionReceipt =
+                                                transactionReceiptProcessor.waitForTransactionReceipt(lastSendResponse.getTransactionHash());
+                                        if (isPolling()) {
+                                            transactionComplete(transactionReceipt);
+                                        }
+                                        return lastSendResponse;
+                                    } catch (TransactionException e) {
+                                        waitException = e;
+                                    }
                                 }
-                                return lastSendResponse;
+                                assert waitException != null;
+                                throw waitException;
                             } else {
                                 retryResetNonce(pendingTransaction);
                             }
@@ -230,6 +246,14 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
             }
             return sendPendingTransaction(pendingTransaction, asyncRetry, waitForReceipt);
         }
+    }
+
+    private boolean isPolling() {
+        return transactionReceiptProcessor instanceof PollingTransactionReceiptProcessor;
+    }
+
+    public boolean hasPendingTransaction(String hash) {
+        return pendingTransactions.containsKey(hash);
     }
 
     private void retryResetNonce(PendingTransaction pendingTransaction) throws IOException {
@@ -259,7 +283,7 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
         if (pendingTransaction == null) {
             log.warn("Transaction already removed from pending set " + transactionReceipt.getTransactionHash());
         } else {
-            if (transactionReceiptProcessor instanceof PollingTransactionReceiptProcessor
+            if (isPolling()
                     || !retryCallback
                     || pendingTransaction.isNonceUnstuck()
                     || pendingTransaction.getAcceptanceCallback() != null) {
@@ -287,9 +311,7 @@ public class RetryingRawTransactionManager extends FastRawTransactionManager {
     private Fees1559 calculateFees1559(BigInteger gasPrice) throws IOException {
         Fees1559 result = new Fees1559();
         EthBlock ethBlock = web3j.ethGetBlockByNumber(DefaultBlockParameterName.PENDING, false).send();
-        String auxBaseFee = ethBlock.getBlock().getBaseFeePerGas();
-        BigInteger baseFee = Numeric.decodeQuantity(auxBaseFee);
-        //BigInteger baseFee = ethBlock.getBlock().getBaseFeePerGas();
+        BigInteger baseFee = ethBlock.getBlock().getBaseFeePerGas();
         BigInteger minTipToMiner = gasPrice.divide(BigInteger.valueOf(1000)); //always toss some coins to the miner
         result.maxFeePerGas = gasPrice.max(baseFee.add(minTipToMiner));
         result.maxPriorityFeePerGas = result.maxFeePerGas.subtract(baseFee);
