@@ -14,9 +14,7 @@
  */
 package com.jelurida.ardor.contracts.interchain.eth;
 
-import com.jelurida.web3j.generated.BRIDGE_ERC20;
 import com.jelurida.web3j.erc20.utils.txman.RetryingRawTransactionManager;
-import com.jelurida.web3j.generated.IERC20;
 import nxt.Tester;
 import nxt.addons.JO;
 import nxt.http.callers.GetAccountAssetsCall;

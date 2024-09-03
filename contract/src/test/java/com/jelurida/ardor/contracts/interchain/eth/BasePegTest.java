@@ -37,6 +37,7 @@ import org.junit.BeforeClass;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.response.PollingTransactionReceiptProcessor;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
@@ -122,8 +123,9 @@ public class BasePegTest extends AbstractContractTest {
 
     @NotNull
     RetryingRawTransactionManager createTransactionManager(Credentials account) {
+        PollingTransactionReceiptProcessor processor = new PollingTransactionReceiptProcessor(web3j, 5000, 3);
         return RetryingRawTransactionManager.create(web3j,
-                account, paramsJo.getLong("chainId"), 3, 5000, false,
+                account, paramsJo.getLong("chainId"), processor,
                 (failedPrice) -> failedPrice.multiply(BigInteger.valueOf(2)));
     }
 
